@@ -36,7 +36,7 @@ ls:
 .PHONY: run
 run:
 	@printf "\033[32m\xE2\x9c\x93 Run go-npchat\n\033[0m"
-	@docker run go-npchat:latest --cert cert.pem --key key.pem
+	@docker run -p 8000 go-npchat --cert cert.pem --key key.pem
 
 ## - Scan for known vulnerabilities
 .PHONY: scan

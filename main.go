@@ -128,6 +128,7 @@ func main() {
 		fmt.Printf("listening on %v\n", addr)
 		http.ListenAndServe(addr, nil)
 	}
+	
 }
 
 func HandleSocketMessage(conn *websocket.Conn, msg *ClientMessage,
