@@ -123,12 +123,14 @@ func main() {
 	addr := fmt.Sprintf(":%v", opt.Port)
 	if opt.CertFile != "" && opt.KeyFile != "" {
 		fmt.Printf("listening on %v, serving with TLS\n", addr)
-		http.ListenAndServeTLS(addr, opt.CertFile, opt.KeyFile, nil)
+		err := http.ListenAndServeTLS(addr, opt.CertFile, opt.KeyFile, nil)
+		if err != nil {
+			fmt.Println("failed to start HTTPS server\n", err)
+		}
 	} else {
 		fmt.Printf("listening on %v\n", addr)
 		http.ListenAndServe(addr, nil)
 	}
-	
 }
 
 func HandleSocketMessage(conn *websocket.Conn, msg *ClientMessage,

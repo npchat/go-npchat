@@ -24,6 +24,8 @@ RUN adduser \
     "${USER}"
 WORKDIR $GOPATH/src/mypackage/myapp/
 COPY . .
+COPY ./cert.pem ./cert.pem
+COPY ./key.pem ./key.pem
 
 # Fetch dependencies.
 RUN go get -d -v
@@ -46,9 +48,13 @@ COPY --from=builder /etc/group /etc/group
 
 # Copy our static executable
 COPY --from=builder /go/bin/npchat /go/bin/npchat
+COPY ./cert.pem ./cert.pem
+COPY ./key.pem ./key.pem
 
 # Use an unprivileged user
-USER appuser:appuser
+#USER appuser:appuser
+
+EXPOSE 8000
 
 # Run the binary
 ENTRYPOINT ["/go/bin/npchat"]
