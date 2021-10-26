@@ -62,7 +62,7 @@ func main() {
 		}
 
 		if msgStore[idEncoded] == nil {
-			msgStore[idEncoded] = make(chan []byte, 10)
+			msgStore[idEncoded] = make(chan []byte, 5096)
 		}
 
 		// handle POST message
@@ -73,9 +73,7 @@ func main() {
 				http.Error(w, "Error reading body", http.StatusBadRequest)
 				return
 			}
-			fmt.Println(len(msgStore[idEncoded]), "<- msg ")
 			msgStore[idEncoded] <- body
-			fmt.Println(len(msgStore[idEncoded]), "<- msg ")
 			r := ServerMessage{Message: "sent"}
 			rj, err := json.Marshal(r)
 			if err != nil {
@@ -129,7 +127,10 @@ func main() {
 		}
 	} else {
 		fmt.Printf("listening on %v\n", addr)
-		http.ListenAndServe(addr, nil)
+		err := http.ListenAndServe(addr, nil)
+		if err != nil {
+			fmt.Println("failed to start HTTP server\n", err)
+		}
 	}
 }
 
@@ -157,9 +158,8 @@ func HandleSocketMessage(conn *websocket.Conn, msg *ClientMessage,
 		for m := range msgChan {
 			err = conn.WriteMessage(websocket.TextMessage, m)
 			if err != nil {
-				fmt.Println("handle this!!")
-				msgChan <- m // ??!!
-				return err
+				fmt.Println("issue writing message to msgChan", err)
+				msgChan <- m
 			}
 		}
 	} else {
