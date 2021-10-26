@@ -98,14 +98,12 @@ func main() {
 				fmt.Println("send only json")
 				break
 			}
-
 			var msg ClientMessage
 			err = json.Unmarshal(msgTxt, &msg)
 			if err != nil {
 				fmt.Println(err)
 				break
 			}
-
 			err = HandleSocketMessage(conn, &msg, challCountChan, privChan, id, msgStore[idEncoded])
 			if err != nil {
 				fmt.Println("failed handling ws msg", err)
