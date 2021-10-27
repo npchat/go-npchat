@@ -20,26 +20,6 @@ import (
 const PORT = 8000
 const DBFILE = "msg.log"
 
-type ServerMessage struct {
-	Message string `json:"message"`
-}
-
-type ServerChallenge struct {
-	Challenge Challenge `json:"challenge"`
-}
-
-type ClientMessage struct {
-	Get       string    `json:"get"`
-	Challenge Challenge `json:"challenge"`
-	PublicKey string    `json:"publicKey"`
-	Solution  string    `json:"solution"`
-}
-
-type ChatMessage struct {
-	Id   string
-	Body []byte
-}
-
 // Refresh key after given limit for challenge count
 func KeepFreshKey(challCount chan int, priv chan ecdsa.PrivateKey, limit int) {
 	count := 0
@@ -62,21 +42,22 @@ func KeepFreshKey(challCount chan int, priv chan ecdsa.PrivateKey, limit int) {
 	}
 }
 
-func GetStoredMessages(id []byte, messages chan []byte) {
+func GetStoredMessages(id string, messages chan []byte) {
 	// return messages where Id prefix matches
-	f, err := os.OpenFile(DBFILE, os.O_CREATE|os.O_WRONLY|os.O_APPEND, os.ModePerm)
+	f, err := os.OpenFile(DBFILE, os.O_RDONLY, os.ModePerm)
 	if err != nil {
 		log.Fatal(err)
 	}
 	sc := bufio.NewScanner(f)
-	aStr := string(id)
 	for sc.Scan() {
 		ln := sc.Text()
-		if strings.HasPrefix(ln, aStr) {
-			m := []byte(ln)[len(id)-1:]
+		if strings.HasPrefix(ln, id) {
+			fmt.Println(ln)
+			m := []byte(ln)[len(id):]
 			messages <- m
 		}
 	}
+	close(messages)
 	f.Close()
 }
 
@@ -89,23 +70,24 @@ func PostAuth(conn *websocket.Conn, connMap map[string]chan *websocket.Conn, id 
 		conn.Close()
 		return
 	}
-	/*sm := make(chan []byte)
-	defer close(sm)
+	sm := make(chan []byte)
 	go GetStoredMessages(id, sm)
 	for m := range sm {
 		err := conn.WriteMessage(websocket.TextMessage, m)
 		if err != nil {
 			fmt.Println(err)
 		}
-	}*/
+	}
 	// register this conn
 	if connMap[id] == nil {
 		connMap[id] = make(chan *websocket.Conn)
 	}
 	wsChan := connMap[id]
 	for {
-		wsChan <- conn
-		fmt.Println("pushed conn")
+		select <- done:
+		break
+		case: wsChan <- conn
+			fmt.Println("pushed conn")
 	}
 }
 
@@ -147,13 +129,17 @@ func main() {
 			wsChan := connMap[idEncoded]
 			select {
 			case ws := <-wsChan:
-				err = ws.WriteMessage(websocket.TextMessage, body)
-				if err != nil {
-					fmt.Println("failed sending via websocket", err)
-					WriteToStore("", idEncoded+string(body))
-					fmt.Println(r.RemoteAddr, "stored")
+				if ws != nil {
+					err = ws.WriteMessage(websocket.TextMessage, body)
+					if err != nil {
+						fmt.Println("failed sending via websocket", err)
+					} else {
+						fmt.Println(r.RemoteAddr, "sent using websocket")
+						break
+					}
 				}
-				fmt.Println(r.RemoteAddr, "sent using websocket")
+				WriteToStore("", idEncoded+string(body))
+				fmt.Println(r.RemoteAddr, "stored")
 				break
 			default:
 				WriteToStore("", idEncoded+string(body))
@@ -205,7 +191,7 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 		}
-		close(connMap[idEncoded])
+
 		fmt.Println(r.RemoteAddr, "closed")
 	})
 

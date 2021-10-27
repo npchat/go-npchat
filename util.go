@@ -17,6 +17,26 @@ type Options struct {
 	KeyFile  string
 }
 
+type ServerMessage struct {
+	Message string `json:"message"`
+}
+
+type ServerChallenge struct {
+	Challenge Challenge `json:"challenge"`
+}
+
+type ClientMessage struct {
+	Get       string    `json:"get"`
+	Challenge Challenge `json:"challenge"`
+	PublicKey string    `json:"publicKey"`
+	Solution  string    `json:"solution"`
+}
+
+type ChatMessage struct {
+	Id   string
+	Body []byte
+}
+
 func GetOptionsFromFlags() Options {
 	o := Options{}
 	flag.IntVar(&o.Port, "p", 8000, "port must be an int")
