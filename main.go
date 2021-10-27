@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -8,13 +9,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gorilla/websocket"
 )
 
 const PORT = 8000
+const DBFILE = "msg.log"
 
 type ServerMessage struct {
 	Message string `json:"message"`
@@ -36,20 +40,90 @@ type ChatMessage struct {
 	Body []byte
 }
 
+// Refresh key after given limit for challenge count
+func KeepFreshKey(challCount chan int, priv chan ecdsa.PrivateKey, limit int) {
+	count := 0
+	curKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for c := range challCount {
+		count += c
+		if count >= limit {
+			curKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			count = 0
+		}
+		priv <- *curKey
+	}
+}
+
+func GetStoredMessages(id []byte, messages chan []byte) {
+	// return messages where Id prefix matches
+	f, err := os.OpenFile(DBFILE, os.O_CREATE|os.O_WRONLY|os.O_APPEND, os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	sc := bufio.NewScanner(f)
+	aStr := string(id)
+	for sc.Scan() {
+		ln := sc.Text()
+		if strings.HasPrefix(ln, aStr) {
+			m := []byte(ln)[len(id)-1:]
+			messages <- m
+		}
+	}
+	f.Close()
+}
+
+func PostAuth(conn *websocket.Conn, connMap map[string]chan *websocket.Conn, id string) {
+	r := ServerMessage{Message: "handshake done"}
+	rj, _ := json.Marshal(r)
+	err := conn.WriteMessage(websocket.TextMessage, rj)
+	if err != nil {
+		fmt.Println(err)
+		conn.Close()
+		return
+	}
+	/*sm := make(chan []byte)
+	defer close(sm)
+	go GetStoredMessages(id, sm)
+	for m := range sm {
+		err := conn.WriteMessage(websocket.TextMessage, m)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}*/
+	// register this conn
+	if connMap[id] == nil {
+		connMap[id] = make(chan *websocket.Conn)
+	}
+	wsChan := connMap[id]
+	for {
+		wsChan <- conn
+		fmt.Println("pushed conn")
+	}
+}
+
 func main() {
+	WriteToStore("Started", "")
 	opt := GetOptionsFromFlags()
 	fmt.Println(opt)
 
-	challCountChan := make(chan int)
-	defer close(challCountChan)
+	challCount := make(chan int)
+	defer close(challCount)
 
-	privChan := make(chan ecdsa.PrivateKey)
-	defer close(privChan)
+	priv := make(chan ecdsa.PrivateKey)
+	defer close(priv)
 
-	// buffered channel for each ID
-	msgStore := make(map[string]chan []byte)
+	// map of channels for websockets
+	connMap := make(map[string]chan *websocket.Conn)
 
-	go KeepFreshKey(challCountChan, privChan, 5)
+	go KeepFreshKey(challCount, priv, 5)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
@@ -61,10 +135,6 @@ func main() {
 			return
 		}
 
-		if msgStore[idEncoded] == nil {
-			msgStore[idEncoded] = make(chan []byte, 5096)
-		}
-
 		// handle POST message
 		if r.Method == "POST" {
 			body, err := ioutil.ReadAll(r.Body)
@@ -73,11 +143,27 @@ func main() {
 				http.Error(w, "Error reading body", http.StatusBadRequest)
 				return
 			}
-			msgStore[idEncoded] <- body
-			r := ServerMessage{Message: "sent"}
-			rj, err := json.Marshal(r)
+
+			wsChan := connMap[idEncoded]
+			select {
+			case ws := <-wsChan:
+				err = ws.WriteMessage(websocket.TextMessage, body)
+				if err != nil {
+					fmt.Println("failed sending via websocket", err)
+					WriteToStore("", idEncoded+string(body))
+					fmt.Println(r.RemoteAddr, "stored")
+				}
+				fmt.Println(r.RemoteAddr, "sent using websocket")
+				break
+			default:
+				WriteToStore("", idEncoded+string(body))
+				fmt.Println(r.RemoteAddr, "stored")
+			}
+
+			resp := ServerMessage{Message: "sent"}
+			rj, err := json.Marshal(resp)
 			if err != nil {
-				fmt.Println("failed to marshal response")
+				fmt.Println("failed to marshal json", err)
 			}
 			w.Write(rj)
 			return
@@ -86,8 +172,8 @@ func main() {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			fmt.Println(err)
-			return
 		}
+		isAuthed := false
 		for {
 			msgType, msgTxt, err := conn.ReadMessage()
 			if err != nil {
@@ -104,16 +190,23 @@ func main() {
 				fmt.Println(err)
 				break
 			}
-			err = HandleSocketMessage(conn, &msg, challCountChan, privChan, id, msgStore[idEncoded])
-			if err != nil {
-				fmt.Println("failed handling ws msg", err)
+			isAuthed = AuthenticateSocket(conn, &msg, challCount, priv, id)
+			if isAuthed {
+				fmt.Println(r.RemoteAddr, "authed")
 				break
 			}
 		}
+		fmt.Println(r.RemoteAddr, "isAuthed", isAuthed)
+		if isAuthed {
+			PostAuth(conn, connMap, idEncoded)
+		}
+		fmt.Println(r.RemoteAddr, "done, closing")
 		err = conn.Close()
 		if err != nil {
 			fmt.Println(err)
 		}
+		close(connMap[idEncoded])
+		fmt.Println(r.RemoteAddr, "closed")
 	})
 
 	addr := fmt.Sprintf(":%v", opt.Port)
@@ -130,70 +223,4 @@ func main() {
 			fmt.Println("failed to start HTTP server\n", err)
 		}
 	}
-}
-
-func HandleSocketMessage(conn *websocket.Conn, msg *ClientMessage,
-	challCountChan chan int, priv chan ecdsa.PrivateKey,
-	id []byte, msgChan chan []byte) error {
-	if msg.Get == "challenge" {
-		challCountChan <- 1
-		privKey := <-priv
-		HandleChallengeRequest(conn, &privKey)
-	} else if msg.Solution != "" {
-		challCountChan <- 0 // don't increment counter
-		privKey := <-priv   // just get key
-		if !VerifySolution(msg, id, &privKey.PublicKey) {
-			fmt.Println("unauthorized")
-			return nil
-		}
-		fmt.Printf("%v authed\n", conn.RemoteAddr())
-		r := ServerMessage{Message: "handshake done"}
-		rj, err := json.Marshal(r)
-		if err != nil {
-			return err
-		}
-		conn.WriteMessage(websocket.TextMessage, rj)
-		for m := range msgChan {
-			err = conn.WriteMessage(websocket.TextMessage, m)
-			if err != nil {
-				fmt.Println("issue writing message to msgChan", err)
-				msgChan <- m
-			}
-		}
-	} else {
-		fmt.Println("invalid message")
-	}
-	return nil
-}
-
-// Refresh key after given limit for challenge count
-func KeepFreshKey(challCountChan chan int, privChan chan ecdsa.PrivateKey, limit int) {
-	count := 0
-	curKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	for msgCount := range challCountChan {
-		count += msgCount
-		if count >= limit {
-			curKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			count = 0
-		}
-		privChan <- *curKey
-	}
-}
-
-func CheckOrigin(r *http.Request) bool {
-	return true
-}
-
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin:     CheckOrigin,
 }

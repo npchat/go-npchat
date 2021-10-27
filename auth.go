@@ -61,6 +61,27 @@ func HandleChallengeRequest(conn *websocket.Conn, priv *ecdsa.PrivateKey) {
 	}
 }
 
+func AuthenticateSocket(conn *websocket.Conn, msg *ClientMessage,
+	challCountChan chan int, priv chan ecdsa.PrivateKey,
+	id []byte) bool {
+	if msg.Get == "challenge" {
+		challCountChan <- 1
+		privKey := <-priv
+		HandleChallengeRequest(conn, &privKey)
+	} else if msg.Solution != "" {
+		challCountChan <- 0 // don't increment counter
+		privKey := <-priv   // just get key
+		if !VerifySolution(msg, id, &privKey.PublicKey) {
+			fmt.Println("unauthorized")
+			return false
+		}
+		return true
+	} else {
+		fmt.Println("invalid message")
+	}
+	return false
+}
+
 func VerifySolution(msg *ClientMessage, id []byte, sPub *ecdsa.PublicKey) bool {
 	// decode client public key
 	cPubBytes, err := base64.RawURLEncoding.DecodeString(msg.PublicKey)
