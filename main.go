@@ -61,7 +61,39 @@ func GetStoredMessages(id string, messages chan []byte) {
 	f.Close()
 }
 
-func PostAuth(conn *websocket.Conn, connMap map[string]chan *websocket.Conn, id string) {
+func PumpMessages(msg chan ChatMessage, register chan Session, unregister chan Session) {
+	active := make(map[*websocket.Conn]bool)
+	sessions := make(map[string]Session)
+	for {
+		select {
+		case s := <-register:
+			sessions[s.Id] = s
+			active[s.Conn] = true
+			PostAuth(s.Conn, s.Id)
+		case s := <-unregister:
+			active[s.Conn] = false
+			fmt.Println(s.Conn.RemoteAddr(), s.Id, "closed")
+		case m := <-msg:
+			// find session by Id
+			s := sessions[m.Id]
+			if active[s.Conn] {
+				err := s.Conn.WriteMessage(websocket.TextMessage, m.Body)
+				if err != nil {
+					fmt.Println(s.Conn.RemoteAddr(), m.Id, "<- ws closed?!")
+					WriteToStore("", m.Id+string(m.Body))
+					fmt.Println(m.Id, "<- stored")
+				} else {
+					fmt.Println(s.Conn.RemoteAddr(), m.Id, "<- sent")
+				}
+			} else {
+				WriteToStore("", m.Id+string(m.Body))
+				fmt.Println(m.Id, "<- stored")
+			}
+		}
+	}
+}
+
+func PostAuth(conn *websocket.Conn, id string) {
 	r := ServerMessage{Message: "handshake done"}
 	rj, _ := json.Marshal(r)
 	err := conn.WriteMessage(websocket.TextMessage, rj)
@@ -78,17 +110,6 @@ func PostAuth(conn *websocket.Conn, connMap map[string]chan *websocket.Conn, id 
 			fmt.Println(err)
 		}
 	}
-	// register this conn
-	if connMap[id] == nil {
-		connMap[id] = make(chan *websocket.Conn)
-	}
-	wsChan := connMap[id]
-	for {
-		select <- done:
-		break
-		case: wsChan <- conn
-			fmt.Println("pushed conn")
-	}
 }
 
 func main() {
@@ -102,10 +123,13 @@ func main() {
 	priv := make(chan ecdsa.PrivateKey)
 	defer close(priv)
 
-	// map of channels for websockets
-	connMap := make(map[string]chan *websocket.Conn)
+	msg := make(chan ChatMessage)
+	register := make(chan Session)
+	unregister := make(chan Session)
 
 	go KeepFreshKey(challCount, priv, 5)
+
+	go PumpMessages(msg, register, unregister)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
@@ -125,27 +149,7 @@ func main() {
 				http.Error(w, "Error reading body", http.StatusBadRequest)
 				return
 			}
-
-			wsChan := connMap[idEncoded]
-			select {
-			case ws := <-wsChan:
-				if ws != nil {
-					err = ws.WriteMessage(websocket.TextMessage, body)
-					if err != nil {
-						fmt.Println("failed sending via websocket", err)
-					} else {
-						fmt.Println(r.RemoteAddr, "sent using websocket")
-						break
-					}
-				}
-				WriteToStore("", idEncoded+string(body))
-				fmt.Println(r.RemoteAddr, "stored")
-				break
-			default:
-				WriteToStore("", idEncoded+string(body))
-				fmt.Println(r.RemoteAddr, "stored")
-			}
-
+			msg <- ChatMessage{Id: idEncoded, Body: body}
 			resp := ServerMessage{Message: "sent"}
 			rj, err := json.Marshal(resp)
 			if err != nil {
@@ -155,44 +159,47 @@ func main() {
 			return
 		}
 
+		ugh := r.Header.Get("upgrade")
+		if ugh == "" {
+			w.Write([]byte("Expected websocket upgrade"))
+			return
+		}
+
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			fmt.Println(err)
 		}
-		isAuthed := false
+
+		conn.SetCloseHandler(func(code int, text string) error {
+			fmt.Println("JOEY!", code, text)
+			unregister <- Session{Id: idEncoded, Conn: conn}
+			return nil
+		})
+
 		for {
 			msgType, msgTxt, err := conn.ReadMessage()
 			if err != nil {
 				fmt.Println(err)
-				break
+				conn.Close()
+				return
 			}
 			if msgType != websocket.TextMessage {
 				fmt.Println("send only json")
-				break
+				conn.Close()
+				return
 			}
 			var msg ClientMessage
 			err = json.Unmarshal(msgTxt, &msg)
 			if err != nil {
 				fmt.Println(err)
-				break
+				conn.Close()
+				return
 			}
-			isAuthed = AuthenticateSocket(conn, &msg, challCount, priv, id)
-			if isAuthed {
+			if AuthenticateSocket(conn, &msg, challCount, priv, id) {
 				fmt.Println(r.RemoteAddr, "authed")
-				break
+				register <- Session{Id: idEncoded, Conn: conn}
 			}
 		}
-		fmt.Println(r.RemoteAddr, "isAuthed", isAuthed)
-		if isAuthed {
-			PostAuth(conn, connMap, idEncoded)
-		}
-		fmt.Println(r.RemoteAddr, "done, closing")
-		err = conn.Close()
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		fmt.Println(r.RemoteAddr, "closed")
 	})
 
 	addr := fmt.Sprintf(":%v", opt.Port)

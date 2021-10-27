@@ -37,6 +37,11 @@ type ChatMessage struct {
 	Body []byte
 }
 
+type Session struct {
+	Id   string
+	Conn *websocket.Conn
+}
+
 func GetOptionsFromFlags() Options {
 	o := Options{}
 	flag.IntVar(&o.Port, "p", 8000, "port must be an int")
