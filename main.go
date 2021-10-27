@@ -17,7 +17,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const PORT = 8000
+const PORT_HTTP = 8000
+const PORT_HTTPS = 443
 const DBFILE = "msg.log"
 
 // Refresh key after given limit for challenge count
