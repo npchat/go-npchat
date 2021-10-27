@@ -52,7 +52,6 @@ func GetStoredMessages(id string, messages chan []byte) {
 	for sc.Scan() {
 		ln := sc.Text()
 		if strings.HasPrefix(ln, id) {
-			fmt.Println(ln)
 			m := []byte(ln)[len(id):]
 			messages <- m
 		}
@@ -170,8 +169,7 @@ func main() {
 			fmt.Println(err)
 		}
 
-		conn.SetCloseHandler(func(code int, text string) error {
-			fmt.Println("JOEY!", code, text)
+		conn.SetCloseHandler(func(_ int, _ string) error {
 			unregister <- Session{Id: idEncoded, Conn: conn}
 			return nil
 		})
