@@ -50,7 +50,7 @@ func PumpMessages(msg chan ChatMessage, register chan Session, unregister chan S
 		case s := <-register:
 			sessions[s.Id] = s
 			active[s.Conn] = true
-			PostAuth(s.Conn, store[s.Id])
+			PostAuth(s.Conn, s.Id, store[s.Id], msg)
 		case s := <-unregister:
 			active[s.Conn] = false
 			fmt.Println(s.Conn.RemoteAddr(), s.Id, "closed")
@@ -79,7 +79,7 @@ func PumpMessages(msg chan ChatMessage, register chan Session, unregister chan S
 	}
 }
 
-func PostAuth(conn *websocket.Conn, stored [][]byte) {
+func PostAuth(conn *websocket.Conn, id string, stored [][]byte, store chan ChatMessage) {
 	r := ServerMessage{Message: "handshake done"}
 	rj, _ := json.Marshal(r)
 	err := conn.WriteMessage(websocket.TextMessage, rj)
@@ -92,6 +92,8 @@ func PostAuth(conn *websocket.Conn, stored [][]byte) {
 		err := conn.WriteMessage(websocket.TextMessage, m)
 		if err != nil {
 			fmt.Println(err)
+			// push it back to storage
+			store <- ChatMessage{Id: id, Body: m}
 		}
 	}
 }
