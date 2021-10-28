@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -9,9 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -43,33 +40,17 @@ func KeepFreshKey(challCount chan int, priv chan ecdsa.PrivateKey, limit int) {
 	}
 }
 
-func GetStoredMessages(id string, messages chan []byte) {
-	// return messages where Id prefix matches
-	f, err := os.OpenFile(DBFILE, os.O_RDONLY, os.ModePerm)
-	if err != nil {
-		log.Fatal(err)
-	}
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		ln := sc.Text()
-		if strings.HasPrefix(ln, id) {
-			m := []byte(ln)[len(id):]
-			messages <- m
-		}
-	}
-	close(messages)
-	f.Close()
-}
-
 func PumpMessages(msg chan ChatMessage, register chan Session, unregister chan Session) {
 	active := make(map[*websocket.Conn]bool)
 	sessions := make(map[string]Session)
+	store := make(map[string][][]byte)
+
 	for {
 		select {
 		case s := <-register:
 			sessions[s.Id] = s
 			active[s.Conn] = true
-			PostAuth(s.Conn, s.Id)
+			PostAuth(s.Conn, s.Id, store[s.Id], msg)
 		case s := <-unregister:
 			active[s.Conn] = false
 			fmt.Println(s.Conn.RemoteAddr(), s.Id, "closed")
@@ -79,21 +60,26 @@ func PumpMessages(msg chan ChatMessage, register chan Session, unregister chan S
 			if active[s.Conn] {
 				err := s.Conn.WriteMessage(websocket.TextMessage, m.Body)
 				if err != nil {
-					fmt.Println(s.Conn.RemoteAddr(), m.Id, "<- ws closed?!")
-					WriteToStore("", m.Id+string(m.Body))
+					k := [][]byte{}
+					k = append(k, store[m.Id]...)
+					k = append(k, m.Body)
+					store[m.Id] = k
 					fmt.Println(m.Id, "<- stored")
 				} else {
 					fmt.Println(s.Conn.RemoteAddr(), m.Id, "<- sent")
 				}
 			} else {
-				WriteToStore("", m.Id+string(m.Body))
+				k := [][]byte{}
+				k = append(k, store[m.Id]...)
+				k = append(k, m.Body)
+				store[m.Id] = k
 				fmt.Println(m.Id, "<- stored")
 			}
 		}
 	}
 }
 
-func PostAuth(conn *websocket.Conn, id string) {
+func PostAuth(conn *websocket.Conn, id string, stored [][]byte, store chan ChatMessage) {
 	r := ServerMessage{Message: "handshake done"}
 	rj, _ := json.Marshal(r)
 	err := conn.WriteMessage(websocket.TextMessage, rj)
@@ -102,18 +88,17 @@ func PostAuth(conn *websocket.Conn, id string) {
 		conn.Close()
 		return
 	}
-	sm := make(chan []byte)
-	go GetStoredMessages(id, sm)
-	for m := range sm {
+	for _, m := range stored {
 		err := conn.WriteMessage(websocket.TextMessage, m)
 		if err != nil {
 			fmt.Println(err)
+			// push it back to storage
+			store <- ChatMessage{Id: id, Body: m}
 		}
 	}
 }
 
 func main() {
-	WriteToStore("Started", "")
 	opt := GetOptionsFromFlags()
 	fmt.Println(opt)
 
