@@ -2,11 +2,7 @@ package main
 
 import (
 	"flag"
-	"io/ioutil"
-	"log"
 	"net/http"
-	"os"
-	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -52,26 +48,6 @@ func GetOptionsFromFlags() Options {
 		o.Port = PORT_HTTPS
 	}
 	return o
-}
-
-func WriteToStore(firstLine string, record string) {
-	if firstLine != "" {
-		t := time.Now().In(time.UTC).GoString()
-		err := ioutil.WriteFile(DBFILE, []byte(t+"\n"), 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	if record != "" {
-		file, err := os.OpenFile(DBFILE, os.O_APPEND|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Println(err)
-		}
-		defer file.Close()
-		if _, err := file.WriteString(record + "\n"); err != nil {
-			log.Fatal(err)
-		}
-	}
 }
 
 func CheckOrigin(r *http.Request) bool {
