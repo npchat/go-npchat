@@ -99,7 +99,7 @@ func PostAuth(conn *websocket.Conn, id string, stored [][]byte, store chan ChatM
 }
 
 func main() {
-	opt := GetOptionsFromFlags()
+	opt := GetOptions()
 	fmt.Println(opt)
 
 	challCount := make(chan int)
