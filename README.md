@@ -109,7 +109,7 @@ Adding a timestamp or TTL to the signed challenge would ensure that challenges d
 
 My answer to this question is extremly simple. After `x` challenges are served, generate a fresh key pair. If `x` is low enough that an attacker cannot get enough challenges to deduce the private key, his efforts are futile. This solution does not require any refresh period to be specified, and does not alter in behaviour with increased traffic. The default configuration is `x=5`, because generating P-256 key pairs is computationally inexpensive. This will probably change after some benchmarking & research.
 
-If the assumptions based on a just little knowledge of cryptography & a bunch of research is correct, then the following claims would be true: 
+If the assumptions based on a little knowledge of cryptography & a bunch of research is correct, then the following claims would be true: 
 - Messages cannot be forged or modified
 - Messages can only be collected by the holder of the private key corresponding to a given public key
 
