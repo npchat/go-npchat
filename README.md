@@ -19,7 +19,7 @@ Build a binary
 ```
 Or from source
 ```zsh
-% go run *.go
+% go run .
 ```
 
 ## Protocol
