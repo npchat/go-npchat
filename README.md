@@ -1,8 +1,6 @@
 # go-npchat
 A lightweight npchat server written in Go.
 
-Containerized using first `golang:alpine`, then `FROM scratch` to reduce image size to around 10MB.
-
 ### Simplicity
 The goal of this project is to implement the simplest possible solution for federated & secure communication.
 
