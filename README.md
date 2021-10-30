@@ -8,7 +8,7 @@ Containerized using first `golang:alpine`, then `FROM scratch` to reduce image s
 ```zsh
 % make build
 ```
-Build should take around 10s or less, and come in at less than 10MB.
+Then
 ```zsh
 % docker run -p 8000 go-npchat:latest
 ```
