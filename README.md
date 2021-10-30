@@ -4,7 +4,7 @@ A lightweight npchat server written in Go.
 Containerized using first `golang:alpine`, then `FROM scratch` to reduce image size to around 10MB.
 
 ### Simplicity
-The goal of this project is to implement the simplest possible solution for open, federated & secure communication.
+The goal of this project is to implement the simplest possible solution for federated & secure communication.
 
 The result is a binary or container that can be deployed anywhere, at any scale.
 
@@ -36,6 +36,7 @@ Configure the chat server using either environment variables or arguments.
 - CleanPeriod `default 30 seconds`
 
 If no Cert & PrivKey is provided, the HTTP server will start without TLS.
+
 ### Environment variables
 ```zsh
 export NPCHAT_PORT=8000
