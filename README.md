@@ -66,7 +66,7 @@ A message post request should look something like:
 "s":"Rg0bC5zPMcOW1UbZMdcF7NBKZMLOVlPqG_zgRRG_ztkdK7nswQgmWaMEpQQw6HU5KMQICX3GUI6mE0uwBkj8lg"}'
 ```
 #### Public key hash
-The key peice of information in this request is `WoQSzF_Hp_sC_nv03Wv6HofbLM1iY6taN9lZ2NZyrZg`.
+The key peice of information in this request is the URL pathname `WoQSzF_Hp_sC_nv03Wv6HofbLM1iY6taN9lZ2NZyrZg`.
 This is the hash of the recipient's ECDSA P-256 public key.
 
 #### Message body
