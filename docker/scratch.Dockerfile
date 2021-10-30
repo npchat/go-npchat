@@ -23,8 +23,11 @@ RUN adduser \
     "${USER}"
 WORKDIR $GOPATH/src/mypackage/myapp/
 COPY . .
-COPY ./cert.pem ./cert.pem
-COPY ./key.pem ./key.pem
+
+# Until auto provisioning/renewal is implemented
+COPY ./ECC-cert.pem ./ECC-cert.pem
+COPY ./ECC-chain.pem ./ECC-chain.pem
+COPY ./ECC-privkey.pem ./ECC-privkey.pem
 
 # Fetch dependencies.
 RUN go get -d -v
@@ -47,8 +50,10 @@ COPY --from=builder /etc/group /etc/group
 
 # Copy our static executable
 COPY --from=builder /go/bin/npchat /go/bin/npchat
-COPY ./cert.pem ./cert.pem
-COPY ./key.pem ./key.pem
+
+COPY ./ECC-cert.pem ./ECC-cert.pem
+COPY ./ECC-chain.pem ./ECC-chain.pem
+COPY ./ECC-privkey.pem ./ECC-privkey.pem
 
 # Use an unprivileged user
 #USER appuser:appuser
