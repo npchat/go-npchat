@@ -1,7 +1,12 @@
 # go-npchat
-A lightweight npchat server implementation written in Go.
+A lightweight npchat server written in Go.
 
 Containerized using first `golang:alpine`, then `FROM scratch` to reduce image size to around 10MB.
+
+### Simplicity
+The goal of this project is to implement the simplest possible solution for open, federated & secure communication.
+
+The result is a binary or container that can be deployed anywhere, at any scale.
 
 ## Usage
 ### With Docker
@@ -118,6 +123,3 @@ This ensures that clients are flexible in what they send, and also flexible in h
 
 #### How the webclient does it
 The npchat webclient implements ECDH P-256 to derive a shared secret from the ECDH public keys, and AES-GCM to encrypt messages with the shared secret. A more complete key derivation step is necessary here, HKDF would be good.
-
-### Simplicity
-The goal of this project is to implement the simplest possible solution for open, federated & secure communication. The result is a binary or container that can be deployed anywhere, at any scale.
