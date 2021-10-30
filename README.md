@@ -6,7 +6,7 @@ Containerized using first `golang:alpine`, then `FROM scratch` to reduce image s
 ### Simplicity
 The goal of this project is to implement the simplest possible solution for federated & secure communication.
 
-The result is a binary or container that can be deployed anywhere, at any scale.
+The result is a binary or 10MB container that can be deployed anywhere, at any scale.
 
 ## Usage
 ### With Docker
