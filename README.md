@@ -95,4 +95,29 @@ The solution is actually not part of the chat server, it's part of the client. I
 
 ## Security
 ### Authentication
-With this authentication mechanism, security depends on the privacy of the Server's authentication private key. If this is known by an attacker, they can cheat the authentication mechanism by creating their own challenge. This alone is not enough to authenticate. The attacker must also be able to 
+With this mechanism, security depends on privacy of the Server's auth private key & privacy of the Client's auth private key. A client is obviously responsible for secure storage of it's keys.
+
+Every challenge contains the signature for the random bytes. An attacker can request as many challenges as they want...
+
+So how do we prevent the private key being deduced by requesting enough signed challenges? This is a fundamental vulnerability if not handled carefully.
+
+Adding a timestamp or TTL to the signed challenge would ensure that challenges do not remain valid indefinitely, but it does not prevent forged authorization when the private key is deduced by collecting enough challenges.
+
+My answer to this question is extremly simple. After `x` challenges are served, generate a fresh key pair. If `x` is low enough that an attacker cannot get enough challenges to deduce the private key, his efforts are futile. This solution does not require any refresh period to be specified, and does not alter in behaviour with increased traffic. The default configuration is `x=5`, because generating P-256 key pairs is computationally inexpensive. This will probably change after some benchmarking & research.
+
+If the assumptions based on a just little knowledge of cryptography & a bunch of research is correct, then the following claims would be true: 
+- Messages cannot be forged or modified
+- Messages can only be collected by the holder of the private key corresponding to a given public key
+
+### Privacy
+Out of the box, this chat server should provide secure & authenticated transport for messages.
+
+In reality, that has nothing to do with the content that is being transmitted. As such, complete decoupling here is the most secure & separated approach. Hence, encryption of messages is handled completely & only by the client.
+
+This ensures that clients are flexible in what they send, and also flexible in how they send it. Currently the only constraint is that messages are `text/plain` content, normally stringified JSON. A goal is to remove this constraint to allow clients to do things like negotiate WebRTC connections more easily.
+
+#### How the webclient does it
+The npchat webclient implements ECDH P-256 to derive a shared secret from the ECDH public keys, and AES-GCM to encrypt messages with the shared secret. A more complete key derivation step is necessary here, HKDF would be good.
+
+### Simplicity
+The goal of this project is to implement the simplest possible solution for open, federated & secure communication. The result is a binary or container that can be deployed anywhere, at any scale.
