@@ -4,7 +4,7 @@ A lightweight npchat server written in Go.
 ### Simplicity
 The goal of this project is to implement the simplest possible solution for federated & secure communication.
 
-The result is a binary or 10MB container that can be deployed anywhere, at any scale.
+The result is a binary or tiny container (< 10MB) that can be deployed anywhere, at any scale.
 
 ## Usage
 ### With Docker
