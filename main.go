@@ -4,19 +4,12 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
-	"strings"
 
 	"github.com/gorilla/websocket"
 )
-
-const PORT_HTTP = 8000
-const PORT_HTTPS = 443
-const DBFILE = "msg.log"
 
 // Refresh key after given limit for challenge count
 func KeepFreshKey(challCount chan int, priv chan ecdsa.PrivateKey, limit int) {
@@ -40,46 +33,66 @@ func KeepFreshKey(challCount chan int, priv chan ecdsa.PrivateKey, limit int) {
 	}
 }
 
-func PumpMessages(msg chan ChatMessage, register chan Session, unregister chan Session) {
+func PumpMessages(mc MainChannels, hc HousekeepingChannels) {
 	active := make(map[*websocket.Conn]bool)
 	sessions := make(map[string]Session)
-	store := make(map[string][][]byte)
+	store := make(map[string][]StorableMessage)
 
 	for {
 		select {
-		case s := <-register:
+		case s := <-mc.Register: // session
 			sessions[s.Id] = s
 			active[s.Conn] = true
-			PostAuth(s.Conn, s.Id, store[s.Id], msg)
-		case s := <-unregister:
+			m := store[s.Id]
+			delete(store, s.Id)
+			SessionStart(s.Conn, s.Id, m, mc.Msg)
+		case s := <-mc.Unregister: // session
 			active[s.Conn] = false
 			fmt.Println(s.Conn.RemoteAddr(), s.Id, "closed")
-		case m := <-msg:
-			// find session by Id
+		case m := <-mc.Msg: // serve or store
 			s := sessions[m.Id]
 			if active[s.Conn] {
-				err := s.Conn.WriteMessage(websocket.TextMessage, m.Body)
+				err := s.Conn.WriteMessage(websocket.TextMessage, m.Msg.Body)
 				if err != nil {
-					k := [][]byte{}
+					k := []StorableMessage{}
 					k = append(k, store[m.Id]...)
-					k = append(k, m.Body)
+					k = append(k, m.Msg)
 					store[m.Id] = k
 					fmt.Println(m.Id, "<- stored")
 				} else {
 					fmt.Println(s.Conn.RemoteAddr(), m.Id, "<- sent")
 				}
 			} else {
-				k := [][]byte{}
+				k := []StorableMessage{}
 				k = append(k, store[m.Id]...)
-				k = append(k, m.Body)
+				k = append(k, m.Msg)
 				store[m.Id] = k
 				fmt.Println(m.Id, "<- stored")
 			}
+		case <-hc.GetKeys:
+			keys := make([]string, 0, len(store))
+			fmt.Println(store)
+			for k := range store {
+				if len(store[k]) < 1 {
+					delete(store, k)
+				} else {
+					keys = append(keys, k)
+				}
+			}
+			hc.Keys <- keys
+		case i := <-hc.GetMsgsForKey:
+			for _, m := range store[i] {
+				hc.MsgsForKey <- m
+			}
+			hc.MsgsForKey <- StorableMessage{}
+		case skv := <-hc.StoreKeyValue:
+			store[skv.Id] = skv.Msgs
 		}
 	}
 }
 
-func PostAuth(conn *websocket.Conn, id string, stored [][]byte, store chan ChatMessage) {
+// Called when a session is registered
+func SessionStart(conn *websocket.Conn, id string, stored []StorableMessage, store chan ChatMessage) {
 	r := ServerMessage{Message: "handshake done"}
 	rj, _ := json.Marshal(r)
 	err := conn.WriteMessage(websocket.TextMessage, rj)
@@ -88,12 +101,12 @@ func PostAuth(conn *websocket.Conn, id string, stored [][]byte, store chan ChatM
 		conn.Close()
 		return
 	}
-	for _, m := range stored {
-		err := conn.WriteMessage(websocket.TextMessage, m)
+	for _, mS := range stored {
+		err := conn.WriteMessage(websocket.TextMessage, mS.Body)
 		if err != nil {
 			fmt.Println(err)
 			// push it back to storage
-			store <- ChatMessage{Id: id, Body: m}
+			store <- ChatMessage{Id: id, Msg: mS}
 		}
 	}
 }
@@ -102,94 +115,36 @@ func main() {
 	opt := GetOptions()
 	fmt.Println(opt)
 
-	challCount := make(chan int)
-	defer close(challCount)
+	mc := MainChannels{
+		ChallengeCount: make(chan int),
+		PrivKey:        make(chan ecdsa.PrivateKey),
+		Msg:            make(chan ChatMessage),
+		Register:       make(chan Session),
+		Unregister:     make(chan Session),
+	}
 
-	priv := make(chan ecdsa.PrivateKey)
-	defer close(priv)
+	hc := HousekeepingChannels{
+		GetKeys:       make(chan bool),
+		Keys:          make(chan []string),
+		GetMsgsForKey: make(chan string),
+		MsgsForKey:    make(chan StorableMessage),
+		StoreKeyValue: make(chan StoreKeyValue),
+	}
 
-	msg := make(chan ChatMessage)
-	register := make(chan Session)
-	unregister := make(chan Session)
+	go KeepFreshKey(mc.ChallengeCount, mc.PrivKey, 5)
 
-	go KeepFreshKey(challCount, priv, 5)
+	go PumpMessages(mc, hc)
 
-	go PumpMessages(msg, register, unregister)
+	go CleanStore(hc, opt.CleanPeriod)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Access-Control-Allow-Origin", "*")
-
-		idEncoded := strings.TrimLeft(r.URL.Path, "/")
-		id, err := base64.RawURLEncoding.DecodeString(idEncoded)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		// handle POST message
-		if r.Method == "POST" {
-			body, err := ioutil.ReadAll(r.Body)
-			if err != nil {
-				fmt.Println("Error reading body ", err)
-				http.Error(w, "Error reading body", http.StatusBadRequest)
-				return
-			}
-			msg <- ChatMessage{Id: idEncoded, Body: body}
-			resp := ServerMessage{Message: "sent"}
-			rj, err := json.Marshal(resp)
-			if err != nil {
-				fmt.Println("failed to marshal json", err)
-			}
-			w.Write(rj)
-			return
-		}
-
-		ugh := r.Header.Get("upgrade")
-		if ugh == "" {
-			w.Write([]byte("Expected websocket upgrade"))
-			return
-		}
-
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		conn.SetCloseHandler(func(_ int, _ string) error {
-			unregister <- Session{Id: idEncoded, Conn: conn}
-			return nil
-		})
-
-		for {
-			msgType, msgTxt, err := conn.ReadMessage()
-			if err != nil {
-				fmt.Println(err)
-				conn.Close()
-				return
-			}
-			if msgType != websocket.TextMessage {
-				fmt.Println("send only json")
-				conn.Close()
-				return
-			}
-			var msg ClientMessage
-			err = json.Unmarshal(msgTxt, &msg)
-			if err != nil {
-				fmt.Println(err)
-				conn.Close()
-				return
-			}
-			if AuthenticateSocket(conn, &msg, challCount, priv, id) {
-				fmt.Println(r.RemoteAddr, "authed")
-				register <- Session{Id: idEncoded, Conn: conn}
-			}
-		}
+		HandleRequest(mc, w, r, opt.MessageTTL)
 	})
 
 	addr := fmt.Sprintf(":%v", opt.Port)
-	if opt.CertFile != "" && opt.KeyFile != "" {
+	if opt.CertFile != "" && opt.PrivKeyFile != "" {
 		fmt.Printf("listening on %v, serving with TLS\n", addr)
-		err := http.ListenAndServeTLS(addr, opt.CertFile, opt.KeyFile, nil)
+		err := http.ListenAndServeTLS(addr, opt.CertFile, opt.PrivKeyFile, nil)
 		if err != nil {
 			fmt.Println("failed to start HTTPS server\n", err)
 		}
