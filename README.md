@@ -13,7 +13,7 @@ The result is a binary or 10MB container that can be deployed anywhere, at any s
 ```
 Then
 ```zsh
-% docker run -p 8000 go-npchat:latest
+% docker run go-npchat:latest
 ```
 ### With Go
 Build a binary
