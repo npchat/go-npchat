@@ -71,7 +71,6 @@ func PumpMessages(mc MainChannels, hc HousekeepingChannels) {
 			}
 		case <-hc.GetKeys:
 			keys := make([]string, 0, len(store))
-			fmt.Println(store)
 			for k := range store {
 				if len(store[k]) < 1 {
 					delete(store, k)
