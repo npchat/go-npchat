@@ -43,7 +43,7 @@ func GetOptions() Options {
 	o := Options{}
 	flag.StringVar(&o.CertFile, "cert", envCert, "must be a relative file path")
 	flag.StringVar(&o.PrivKeyFile, "privkey", envPrivKey, "must be a relative file path")
-	flag.IntVar(&o.Port, "p", defaultPort, "port must be an int")
+	flag.IntVar(&o.Port, "port", defaultPort, "port must be an int")
 
 	var argMsgTtl int
 	flag.IntVar(&argMsgTtl, "msgttl", defaultMsgTtl, "port must be an int")
