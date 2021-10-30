@@ -24,11 +24,11 @@ Or from source
 
 ## Configuration
 Configure the chat server using either environment variables or arguments.
-- Port, default 8000
-- Cert, default ""
-- PrivKey, default ""
-- MessageTTL, default 60 seconds
-- CleanPeriod, default 30 seconds
+- Port `default 8000`
+- Cert `default ""`
+- PrivKey `default ""`
+- MessageTTL `default 60 seconds`
+- CleanPeriod `default 30 seconds`
 ### Environment variables
 ```zsh
 export NPCHAT_PORT=8000
