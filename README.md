@@ -29,6 +29,8 @@ Configure the chat server using either environment variables or arguments.
 - PrivKey `default ""`
 - MessageTTL `default 60 seconds`
 - CleanPeriod `default 30 seconds`
+
+If no Cert & PrivKey is provided, the HTTP server will start without TLS.
 ### Environment variables
 ```zsh
 export NPCHAT_PORT=8000
