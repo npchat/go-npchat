@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -18,7 +18,7 @@ func HandleRequest(mc MainChannels, w http.ResponseWriter, r *http.Request, msgT
 	idEncoded := strings.TrimLeft(r.URL.Path, "/")
 	id, err := base64.RawURLEncoding.DecodeString(idEncoded)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 
@@ -26,10 +26,10 @@ func HandleRequest(mc MainChannels, w http.ResponseWriter, r *http.Request, msgT
 	if r.Method == "POST" {
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			fmt.Println("Error reading body ", err)
 			http.Error(w, "Error reading body", http.StatusBadRequest)
 			return
 		}
+		r.Body.Close()
 		mc.Msg <- ChatMessage{
 			Id: idEncoded,
 			Msg: StorableMessage{
@@ -38,10 +38,7 @@ func HandleRequest(mc MainChannels, w http.ResponseWriter, r *http.Request, msgT
 			},
 		}
 		resp := ServerMessage{Message: "sent"}
-		rj, err := json.Marshal(resp)
-		if err != nil {
-			fmt.Println("failed to marshal json", err)
-		}
+		rj, _ := json.Marshal(resp)
 		w.Write(rj)
 		return
 	}
@@ -54,7 +51,7 @@ func HandleRequest(mc MainChannels, w http.ResponseWriter, r *http.Request, msgT
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 
 	conn.SetCloseHandler(func(_ int, _ string) error {
@@ -65,25 +62,41 @@ func HandleRequest(mc MainChannels, w http.ResponseWriter, r *http.Request, msgT
 	for {
 		msgType, msgTxt, err := conn.ReadMessage()
 		if err != nil {
-			fmt.Println(err)
 			conn.Close()
 			return
 		}
 		if msgType != websocket.TextMessage {
-			fmt.Println("send only json")
 			conn.Close()
 			return
 		}
 		var msg ClientMessage
 		err = json.Unmarshal(msgTxt, &msg)
 		if err != nil {
-			fmt.Println(err)
 			conn.Close()
 			return
 		}
-		if AuthenticateSocket(conn, &msg, mc.ChallengeCount, mc.PrivKey, id) {
-			fmt.Println(r.RemoteAddr, "authed")
-			mc.Register <- Session{Id: idEncoded, Conn: conn}
+		if msg.Get == "challenge" {
+			mc.ChallengeCount <- 1
+			privKey := <-mc.PrivKey
+			HandleChallengeRequest(conn, &privKey)
+		} else if msg.Solution != "" {
+			mc.ChallengeCount <- 0  // don't increment counter
+			privKey := <-mc.PrivKey // just get key
+			if !VerifySolution(&msg, id, &privKey.PublicKey) {
+				conn.Close()
+				return
+			} else {
+				r := ServerMessage{Message: "handshake done"}
+				rj, _ := json.Marshal(r)
+				err := conn.WriteMessage(websocket.TextMessage, rj)
+				if err != nil {
+					log.Println(err)
+					conn.Close()
+					return
+				}
+				mc.Register <- Session{Id: idEncoded, Conn: conn}
+				log.Println(idEncoded, "<- registered")
+			}
 		}
 	}
 }
@@ -93,7 +106,7 @@ func CheckOrigin(r *http.Request) bool {
 }
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+	ReadBufferSize:  512,
+	WriteBufferSize: 512,
 	CheckOrigin:     CheckOrigin,
 }

@@ -4,8 +4,8 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -16,7 +16,7 @@ func KeepFreshKey(challCount chan int, priv chan ecdsa.PrivateKey, limit int) {
 	count := 0
 	curKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	for c := range challCount {
@@ -24,7 +24,7 @@ func KeepFreshKey(challCount chan int, priv chan ecdsa.PrivateKey, limit int) {
 		if count >= limit {
 			curKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 			if err != nil {
-				fmt.Println(err)
+				log.Println(err)
 				return
 			}
 			count = 0
@@ -45,9 +45,10 @@ func PumpMessages(mc MainChannels, hc HousekeepingChannels) {
 			active[s.Conn] = true
 			m := store[s.Id]
 			delete(store, s.Id)
-			SessionStart(s.Conn, s.Id, m, mc.Msg)
+			go SendStoredMessages(s.Id, m, mc.Msg)
 		case s := <-mc.Unregister: // session
-			active[s.Conn] = false
+			delete(active, s.Conn)
+			delete(sessions, s.Id)
 		case m := <-mc.Msg: // serve or store
 			s := sessions[m.Id]
 			if active[s.Conn] {
@@ -86,28 +87,15 @@ func PumpMessages(mc MainChannels, hc HousekeepingChannels) {
 }
 
 // Called when a session is registered
-func SessionStart(conn *websocket.Conn, id string, stored []StorableMessage, store chan ChatMessage) {
-	r := ServerMessage{Message: "handshake done"}
-	rj, _ := json.Marshal(r)
-	err := conn.WriteMessage(websocket.TextMessage, rj)
-	if err != nil {
-		fmt.Println(err)
-		conn.Close()
-		return
-	}
+func SendStoredMessages(id string, stored []StorableMessage, msg chan ChatMessage) {
 	for _, mS := range stored {
-		err := conn.WriteMessage(websocket.TextMessage, mS.Body)
-		if err != nil {
-			fmt.Println(err)
-			// push it back to storage
-			store <- ChatMessage{Id: id, Msg: mS}
-		}
+		msg <- ChatMessage{Id: id, Msg: mS}
 	}
 }
 
 func main() {
 	opt := GetOptions()
-	fmt.Println(opt)
+	log.Printf("%+v'\n", opt)
 
 	mc := MainChannels{
 		ChallengeCount: make(chan int),
@@ -137,16 +125,16 @@ func main() {
 
 	addr := fmt.Sprintf(":%v", opt.Port)
 	if opt.CertFile != "" && opt.PrivKeyFile != "" {
-		fmt.Printf("listening on %v, serving with TLS\n", addr)
+		log.Printf("listening on %v, serving with TLS\n", addr)
 		err := http.ListenAndServeTLS(addr, opt.CertFile, opt.PrivKeyFile, nil)
 		if err != nil {
-			fmt.Println("failed to start HTTPS server\n", err)
+			log.Println("failed to start HTTPS server\n", err)
 		}
 	} else {
-		fmt.Printf("listening on %v\n", addr)
+		log.Printf("listening on %v\n", addr)
 		err := http.ListenAndServe(addr, nil)
 		if err != nil {
-			fmt.Println("failed to start HTTP server\n", err)
+			log.Println("failed to start HTTP server\n", err)
 		}
 	}
 }

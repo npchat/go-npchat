@@ -8,7 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
+	"log"
 	"math/big"
 
 	"github.com/gorilla/websocket"
@@ -20,7 +20,7 @@ func GenRandomBytes(size int) (blk []byte, err error) {
 	blk = make([]byte, size)
 	_, err = rand.Read(blk)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 	return
 }
@@ -28,7 +28,7 @@ func GenRandomBytes(size int) (blk []byte, err error) {
 func HandleChallengeRequest(conn *websocket.Conn, priv *ecdsa.PrivateKey) {
 	randBytes, err := GenRandomBytes(CHALLENGE_LEN)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	h := sha256.New()
@@ -37,7 +37,7 @@ func HandleChallengeRequest(conn *websocket.Conn, priv *ecdsa.PrivateKey) {
 	prng := rand.Reader
 	r, s, err := ecdsa.Sign(prng, priv, randBytesHash)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	sigBytes := []byte{}
@@ -51,37 +51,16 @@ func HandleChallengeRequest(conn *websocket.Conn, priv *ecdsa.PrivateKey) {
 	json.NewEncoder(buf).Encode(resp)
 	err = conn.WriteMessage(websocket.TextMessage, buf.Bytes())
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
-}
-
-func AuthenticateSocket(conn *websocket.Conn, msg *ClientMessage,
-	challCountChan chan int, priv chan ecdsa.PrivateKey,
-	id []byte) bool {
-	if msg.Get == "challenge" {
-		challCountChan <- 1
-		privKey := <-priv
-		HandleChallengeRequest(conn, &privKey)
-	} else if msg.Solution != "" {
-		challCountChan <- 0 // don't increment counter
-		privKey := <-priv   // just get key
-		if !VerifySolution(msg, id, &privKey.PublicKey) {
-			fmt.Println("unauthorized")
-			return false
-		}
-		return true
-	} else {
-		fmt.Println("invalid message")
-	}
-	return false
 }
 
 func VerifySolution(msg *ClientMessage, id []byte, sPub *ecdsa.PublicKey) bool {
 	// decode client public key
 	cPubBytes, err := base64.RawURLEncoding.DecodeString(msg.PublicKey)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return false
 	}
 
@@ -90,21 +69,21 @@ func VerifySolution(msg *ClientMessage, id []byte, sPub *ecdsa.PublicKey) bool {
 	h.Write(cPubBytes)
 	cPubHash := h.Sum(nil)
 	if !bytes.Equal(id, cPubHash) {
-		fmt.Println("public key does not match id", id, cPubHash)
+		log.Println("public key does not match id", id, cPubHash)
 		return false
 	}
 
 	// decode challenge
 	txt, err := base64.RawURLEncoding.DecodeString(msg.Challenge.Txt)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return false
 	}
 
 	// verify server signature
 	sSig, err := base64.RawURLEncoding.DecodeString(msg.Challenge.Sig)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return false
 	}
 	sL := len(sSig) / 2
@@ -112,7 +91,7 @@ func VerifySolution(msg *ClientMessage, id []byte, sPub *ecdsa.PublicKey) bool {
 	sSigS := new(big.Int).SetBytes(sSig[sL:])
 	sValid := ecdsa.Verify(sPub, txt, sSigR, sSigS)
 	if !sValid {
-		fmt.Println("server signature invalid")
+		log.Println("server signature invalid")
 		return false
 	}
 
@@ -125,7 +104,7 @@ func VerifySolution(msg *ClientMessage, id []byte, sPub *ecdsa.PublicKey) bool {
 	// verify client signature
 	cSig, err := base64.RawURLEncoding.DecodeString(msg.Solution)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return false
 	}
 
