@@ -1,34 +1,10 @@
 package main
 
 import (
-	"crypto/ecdsa"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
-type MainChannels struct {
-	ChallengeCount chan int
-	PrivKey        chan ecdsa.PrivateKey
-	Msg            chan ChatMessage
-	Register       chan Session
-	Unregister     chan Session
-}
-
-type HousekeepingChannels struct {
-	GetKeys       chan bool
-	Keys          chan []string
-	GetMsgsForKey chan string
-	MsgsForKey    chan StorableMessage
-	StoreKeyValue chan StoreKeyValue
-}
-
-type StoreKeyValue struct {
-	Id   string
-	Msgs []StorableMessage
-}
-
-type ServerMessage struct {
+type ServerResponse struct {
 	Message string `json:"message"`
 }
 
@@ -37,7 +13,7 @@ type Challenge struct {
 	Sig string `json:"sig"`
 }
 
-type ServerChallenge struct {
+type ChallengeWrapper struct {
 	Challenge Challenge `json:"challenge"`
 }
 
@@ -48,17 +24,17 @@ type ClientMessage struct {
 	Solution  string    `json:"solution"`
 }
 
-type ChatMessage struct {
-	Id  string
-	Msg StorableMessage
+type MessageWithId struct {
+	Id      string
+	Message Message
 }
 
-type StorableMessage struct {
+type Message struct {
 	Body []byte
 	Time time.Time
 }
 
-type Session struct {
-	Id   string
-	Conn *websocket.Conn
+type Registration struct {
+	Id       string
+	RecvChan chan Message
 }

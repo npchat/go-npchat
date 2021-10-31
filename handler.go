@@ -1,6 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"io/ioutil"
@@ -12,34 +16,43 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func HandleRequest(mc MainChannels, w http.ResponseWriter, r *http.Request, msgTTL time.Duration) {
-	w.Header().Add("Access-Control-Allow-Origin", "*")
+func GetIdFromPath(path string) string {
+	return strings.TrimLeft(path, "/")
+}
 
-	idEncoded := strings.TrimLeft(r.URL.Path, "/")
+func HandlePostRequest(w http.ResponseWriter, r *http.Request,
+	msgTTL time.Duration, isActive bool,
+	recvChan chan Message, store chan MessageWithId) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Error reading body", http.StatusBadRequest)
+		return
+	}
+	r.Body.Close()
+	msg := Message{ // Get ID and send on corresponding chan
+		Body: body,
+		Time: time.Now().Add(msgTTL),
+	}
+	if isActive {
+		recvChan <- msg
+	} else {
+		store <- MessageWithId{
+			Id:      GetIdFromPath(r.URL.Path),
+			Message: msg,
+		}
+	}
+	resp := ServerResponse{Message: "sent"}
+	rj, _ := json.Marshal(resp)
+	w.Write(rj)
+}
+
+func HandleConnectionRequest(w http.ResponseWriter, r *http.Request,
+	register chan Registration, unregister chan string, ask chan string, retrv chan []Message) {
+
+	idEncoded := GetIdFromPath(r.URL.Path)
 	id, err := base64.RawURLEncoding.DecodeString(idEncoded)
 	if err != nil {
 		log.Println(err)
-		return
-	}
-
-	// handle POST message
-	if r.Method == "POST" {
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Error reading body", http.StatusBadRequest)
-			return
-		}
-		r.Body.Close()
-		mc.Msg <- ChatMessage{
-			Id: idEncoded,
-			Msg: StorableMessage{
-				Body: body,
-				Time: time.Now().Add(msgTTL),
-			},
-		}
-		resp := ServerMessage{Message: "sent"}
-		rj, _ := json.Marshal(resp)
-		w.Write(rj)
 		return
 	}
 
@@ -52,50 +65,58 @@ func HandleRequest(mc MainChannels, w http.ResponseWriter, r *http.Request, msgT
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
+		return
 	}
+	defer conn.Close()
 
-	conn.SetCloseHandler(func(_ int, _ string) error {
-		mc.Unregister <- Session{Id: idEncoded, Conn: conn}
-		return nil
-	})
+	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		log.Println("keygen failed", err)
+	}
 
 	for {
 		msgType, msgTxt, err := conn.ReadMessage()
 		if err != nil {
-			conn.Close()
 			return
 		}
 		if msgType != websocket.TextMessage {
-			conn.Close()
 			return
 		}
 		var msg ClientMessage
 		err = json.Unmarshal(msgTxt, &msg)
 		if err != nil {
-			conn.Close()
 			return
 		}
 		if msg.Get == "challenge" {
-			mc.ChallengeCount <- 1
-			privKey := <-mc.PrivKey
-			HandleChallengeRequest(conn, &privKey)
+			challenge, err := GetChallenge(conn, privKey)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			buf := new(bytes.Buffer)
+			json.NewEncoder(buf).Encode(challenge)
+			err = conn.WriteMessage(websocket.TextMessage, buf.Bytes())
+			if err != nil {
+				return
+			}
 		} else if msg.Solution != "" {
-			mc.ChallengeCount <- 0  // don't increment counter
-			privKey := <-mc.PrivKey // just get key
 			if !VerifySolution(&msg, id, &privKey.PublicKey) {
-				conn.Close()
 				return
 			} else {
-				r := ServerMessage{Message: "handshake done"}
+				r := ServerResponse{Message: "handshake done"}
 				rj, _ := json.Marshal(r)
 				err := conn.WriteMessage(websocket.TextMessage, rj)
 				if err != nil {
 					log.Println(err)
-					conn.Close()
 					return
 				}
-				mc.Register <- Session{Id: idEncoded, Conn: conn}
-				log.Println(idEncoded, "<- registered")
+				// register
+				recv := make(chan Message)
+				register <- Registration{
+					Id:       idEncoded,
+					RecvChan: recv,
+				}
+				HandleSession(idEncoded, conn, recv, ask, retrv, unregister)
 			}
 		}
 	}
