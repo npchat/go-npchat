@@ -48,7 +48,6 @@ func PumpMessages(mc MainChannels, hc HousekeepingChannels) {
 			SessionStart(s.Conn, s.Id, m, mc.Msg)
 		case s := <-mc.Unregister: // session
 			active[s.Conn] = false
-			fmt.Println(s.Conn.RemoteAddr(), s.Id, "closed")
 		case m := <-mc.Msg: // serve or store
 			s := sessions[m.Id]
 			if active[s.Conn] {
@@ -58,16 +57,12 @@ func PumpMessages(mc MainChannels, hc HousekeepingChannels) {
 					k = append(k, store[m.Id]...)
 					k = append(k, m.Msg)
 					store[m.Id] = k
-					fmt.Println(m.Id, "<- stored")
-				} else {
-					fmt.Println(s.Conn.RemoteAddr(), m.Id, "<- sent")
 				}
 			} else {
 				k := []StorableMessage{}
 				k = append(k, store[m.Id]...)
 				k = append(k, m.Msg)
 				store[m.Id] = k
-				fmt.Println(m.Id, "<- stored")
 			}
 		case <-hc.GetKeys:
 			keys := make([]string, 0, len(store))
@@ -130,7 +125,7 @@ func main() {
 		StoreKeyValue: make(chan StoreKeyValue),
 	}
 
-	go KeepFreshKey(mc.ChallengeCount, mc.PrivKey, 5)
+	go KeepFreshKey(mc.ChallengeCount, mc.PrivKey, opt.FreshKey)
 
 	go PumpMessages(mc, hc)
 

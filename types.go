@@ -32,6 +32,11 @@ type ServerMessage struct {
 	Message string `json:"message"`
 }
 
+type Challenge struct {
+	Txt string `json:"txt"`
+	Sig string `json:"sig"`
+}
+
 type ServerChallenge struct {
 	Challenge Challenge `json:"challenge"`
 }

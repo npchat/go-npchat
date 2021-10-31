@@ -32,6 +32,7 @@ Configure the chat server using either environment variables or arguments.
 - PrivKey `default ""`
 - MessageTTL `default 60 seconds`
 - CleanPeriod `default 30 seconds`
+- FreshKey `default 100` generate a new key after number of challenges
 
 If no Cert & PrivKey is provided, the HTTP server will start without TLS.
 
@@ -42,12 +43,13 @@ export NPCHAT_CERT=""
 export NPCHAT_PRIVKEY=""
 export NPCHAT_MSG_TTL=60
 export NPCHAT_CLEAN_PERIOD=30
+export NPCHAT_FRESHKEY=100
 ```
 ### Arguments
 ```zsh
 % ./go-npchat --port=443 \
   --cert="cert.pem" --privkey="privkey.pem" \
-  --msgttl=60 --cleanperiod=30
+  --msgttl=240 --cleanperiod=120 --freshkey=100
 ```
 
 ## Transport
@@ -107,9 +109,11 @@ So how do we prevent the private key being deduced by requesting enough signed c
 
 Adding a timestamp or TTL to the signed challenge would ensure that challenges do not remain valid indefinitely, but it does not prevent forged authorization when the private key is deduced by collecting enough challenges.
 
-My answer to this question is extremly simple. After `x` challenges are served, generate a fresh key pair. If `x` is low enough that an attacker cannot get enough challenges to deduce the private key, his efforts are futile. This solution does not require any refresh period to be specified, and does not alter in behaviour with increased traffic. The default configuration is `x=5`, because generating P-256 key pairs is computationally inexpensive. This will probably change after some benchmarking & research.
+My answer to this question is extremly simple. After `x` challenges are served, generate a fresh key pair. If `x` is low enough that an attacker cannot get enough challenges to deduce the private key, his efforts are futile. This solution does not require any refresh period to be specified, and does not alter in behaviour with increased traffic. The default configuration is `x=100`. As generating keys incurs some computational cost, an ideal value depends on available resources & expected traffic.
 
-If the assumptions based on a little knowledge of cryptography & a bunch of research is correct, then the following claims would be true: 
+After load-testing with 100s of clients concurrently connecting & each sending 1000s of messages, I have seen an issue with authentication. If keys are refreshed in the time between issuing a challenge and recieving a response, the authentication will fail because the Server's key has changed. The simplest solution would be for the client to retry, because in reality this happens rarely, and at most `1:x` times.
+
+If the assumptions based on a little knowledge of cryptography & bit of research is correct, then the following claims would be true:
 - Messages cannot be forged or modified
 - Messages can only be collected by the holder of the private key corresponding to a given public key
 

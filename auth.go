@@ -16,11 +16,6 @@ import (
 
 const CHALLENGE_LEN = 32
 
-type Challenge struct {
-	Txt string `json:"txt"`
-	Sig string `json:"sig"`
-}
-
 func GenRandomBytes(size int) (blk []byte, err error) {
 	blk = make([]byte, size)
 	_, err = rand.Read(blk)
