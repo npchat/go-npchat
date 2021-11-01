@@ -13,6 +13,15 @@ import (
 
 const CHALLENGE_LEN = 32
 
+type Challenge struct {
+	Txt string `json:"txt"`
+	Sig string `json:"sig"`
+}
+
+type ChallengeWrapper struct {
+	Challenge Challenge `json:"challenge"`
+}
+
 func genRandomBytes(size int) (blk []byte, err error) {
 	blk = make([]byte, size)
 	_, err = rand.Read(blk)
@@ -95,7 +104,6 @@ func VerifySolution(msg *ClientMessage, id []byte, sPub *ecdsa.PublicKey) bool {
 		log.Println(err)
 		return false
 	}
-
 	cL := len(cSig) / 2
 	cSigR := new(big.Int).SetBytes(cSig[:cL])
 	cSigS := new(big.Int).SetBytes(cSig[cL:])

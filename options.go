@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+const PORT = 8000
+const MSG_TTL = 60               // second
+const CLEAN_PERIOD = MSG_TTL / 2 // second
+
 type Options struct {
 	Port        int
 	CertFile    string
@@ -15,12 +19,7 @@ type Options struct {
 	CleanPeriod time.Duration
 }
 
-const PORT = 8000
-const MSG_TTL = 60               // second
-const CLEAN_PERIOD = MSG_TTL / 2 // second
-
 func GetOptions() Options {
-	// get ENV vars
 	envCert := os.Getenv("NPCHAT_CERT")
 	envPrivKey := os.Getenv("NPCHAT_PRIVKEY")
 

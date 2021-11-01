@@ -21,26 +21,21 @@ func main() {
 	go ms.Manage()
 	go ms.KeepClean()
 
-	sessions := Sessions{
+	ss := SessionStore{
 		Active:     make(map[string]bool),
-		Recv:       make(map[string]chan Message),
+		Recv:       make(map[string]chan *Message),
 		Register:   make(chan Registration),
 		Unregister: make(chan string),
 	}
 
-	go sessions.Manage()
+	go ss.Manage()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
 		if r.Method == "POST" {
-			id := GetIdFromPath(r.URL.Path)
-			sessions.Mtx.Lock()
-			isActive := sessions.Active[id]
-			recvChan := sessions.Recv[id]
-			sessions.Mtx.Unlock()
-			HandlePostRequest(w, r, opt.MessageTTL, isActive, recvChan, ms.Store)
+			HandlePostRequest(w, r, &ss, &ms, &opt)
 		} else {
-			HandleConnectionRequest(w, r, sessions.Register, sessions.Unregister, ms.Ask, ms.Retrv)
+			HandleConnectionRequest(w, r, &ss, &ms)
 		}
 	})
 
@@ -49,13 +44,13 @@ func main() {
 		log.Printf("listening on %v, serving with TLS\n", addr)
 		err := http.ListenAndServeTLS(addr, opt.CertFile, opt.PrivKeyFile, nil)
 		if err != nil {
-			log.Println("failed to start HTTPS server\n", err)
+			log.Println("failed to start HTTPS server", err)
 		}
 	} else {
 		log.Printf("listening on %v\n", addr)
 		err := http.ListenAndServe(addr, nil)
 		if err != nil {
-			log.Println("failed to start HTTP server\n", err)
+			log.Println("failed to start HTTP server", err)
 		}
 	}
 }

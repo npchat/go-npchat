@@ -7,7 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -16,28 +16,42 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type ServerResponse struct {
+	Message string `json:"message"`
+}
+
+type ClientMessage struct {
+	Get       string    `json:"get"`
+	Challenge Challenge `json:"challenge"`
+	PublicKey string    `json:"publicKey"`
+	Solution  string    `json:"solution"`
+}
+
 func GetIdFromPath(path string) string {
 	return strings.TrimLeft(path, "/")
 }
 
-func HandlePostRequest(w http.ResponseWriter, r *http.Request,
-	msgTTL time.Duration, isActive bool,
-	recvChan chan Message, store chan MessageWithId) {
-	body, err := ioutil.ReadAll(r.Body)
+func HandlePostRequest(w http.ResponseWriter, r *http.Request, ss *SessionStore, ms *MessageStore, opt *Options) {
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Error reading body", http.StatusBadRequest)
 		return
 	}
 	r.Body.Close()
-	msg := Message{ // Get ID and send on corresponding chan
+	msg := Message{
 		Body: body,
-		Time: time.Now().Add(msgTTL),
+		Time: time.Now().Add(opt.MessageTTL),
 	}
+	id := GetIdFromPath(r.URL.Path)
+	ss.Mtx.RLock()
+	isActive := ss.Active[id]
+	recv := ss.Recv[id]
+	ss.Mtx.RUnlock()
 	if isActive {
-		recvChan <- msg
+		recv <- &msg
 	} else {
-		store <- MessageWithId{
-			Id:      GetIdFromPath(r.URL.Path),
+		ms.Store <- MessageWithId{
+			Id:      id,
 			Message: msg,
 		}
 	}
@@ -46,18 +60,16 @@ func HandlePostRequest(w http.ResponseWriter, r *http.Request,
 	w.Write(rj)
 }
 
-func HandleConnectionRequest(w http.ResponseWriter, r *http.Request,
-	register chan Registration, unregister chan string, ask chan string, retrv chan []Message) {
-
-	idEncoded := GetIdFromPath(r.URL.Path)
-	id, err := base64.RawURLEncoding.DecodeString(idEncoded)
+func HandleConnectionRequest(w http.ResponseWriter, r *http.Request, ss *SessionStore, ms *MessageStore) {
+	idEnc := GetIdFromPath(r.URL.Path)
+	id, err := base64.RawURLEncoding.DecodeString(idEnc)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	ugh := r.Header.Get("upgrade")
-	if ugh == "" {
+	u := r.Header.Get("upgrade")
+	if u == "" {
 		w.Write([]byte("Expected websocket upgrade"))
 		return
 	}
@@ -113,13 +125,7 @@ func HandleConnectionRequest(w http.ResponseWriter, r *http.Request,
 					log.Println(err)
 					return
 				}
-				// register
-				recv := make(chan Message)
-				register <- Registration{
-					Id:       idEncoded,
-					RecvChan: recv,
-				}
-				HandleSession(idEncoded, conn, recv, ask, retrv, unregister)
+				go HandleSession(idEnc, conn, ss, ms)
 			}
 		}
 	}

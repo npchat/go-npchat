@@ -7,27 +7,39 @@ import (
 
 type MessageStore struct {
 	M           map[string][]Message
-	Mtx         sync.Mutex
+	Mtx         sync.RWMutex
 	Store       chan MessageWithId
 	Ask         chan string
 	Retrv       chan []Message
 	CleanPeriod time.Duration
 }
 
+type MessageWithId struct {
+	Id      string
+	Message Message
+}
+
+type Message struct {
+	Body []byte
+	Time time.Time
+}
+
 func (ms *MessageStore) Manage() {
 	for {
 		select {
 		case msg := <-ms.Store:
-			ms.Mtx.Lock()
 			k := []Message{}
+			ms.Mtx.RLock()
 			k = append(k, ms.M[msg.Id]...)
+			ms.Mtx.RUnlock()
 			k = append(k, msg.Message)
+			ms.Mtx.Lock()
 			ms.M[msg.Id] = k
 			ms.Mtx.Unlock()
 		case a := <-ms.Ask:
-			ms.Mtx.Lock()
+			ms.Mtx.RLock()
 			ms.Retrv <- ms.M[a]
-			ms.Mtx.Unlock()
+			ms.Mtx.RUnlock()
 		}
 	}
 }
