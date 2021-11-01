@@ -88,7 +88,7 @@ func HandleConnectionRequest(w http.ResponseWriter, r *http.Request,
 			return
 		}
 		if msg.Get == "challenge" {
-			challenge, err := GetChallenge(conn, privKey)
+			challenge, err := GetChallenge(privKey)
 			if err != nil {
 				log.Println(err)
 				return

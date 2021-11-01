@@ -9,8 +9,6 @@ import (
 	"encoding/base64"
 	"log"
 	"math/big"
-
-	"github.com/gorilla/websocket"
 )
 
 const CHALLENGE_LEN = 32
@@ -24,7 +22,7 @@ func genRandomBytes(size int) (blk []byte, err error) {
 	return
 }
 
-func GetChallenge(conn *websocket.Conn, priv *ecdsa.PrivateKey) (ChallengeWrapper, error) {
+func GetChallenge(priv *ecdsa.PrivateKey) (ChallengeWrapper, error) {
 	randBytes, err := genRandomBytes(CHALLENGE_LEN)
 	if err != nil {
 		return ChallengeWrapper{}, err
