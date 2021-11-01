@@ -69,10 +69,9 @@ func HandleConnectionRequest(w http.ResponseWriter, r *http.Request,
 	}
 	defer conn.Close()
 
-	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		log.Println("keygen failed", err)
-	}
+	privKey := make(chan *ecdsa.PrivateKey)
+	challengeCount := make(chan int)
+	go KeepFreshKey(privKey, challengeCount, 20)
 
 	for {
 		msgType, msgTxt, err := conn.ReadMessage()
@@ -88,7 +87,9 @@ func HandleConnectionRequest(w http.ResponseWriter, r *http.Request,
 			return
 		}
 		if msg.Get == "challenge" {
-			challenge, err := GetChallenge(privKey)
+			challengeCount <- 1
+			priv := <-privKey
+			challenge, err := GetChallenge(priv)
 			if err != nil {
 				log.Println(err)
 				return
@@ -100,7 +101,9 @@ func HandleConnectionRequest(w http.ResponseWriter, r *http.Request,
 				return
 			}
 		} else if msg.Solution != "" {
-			if !VerifySolution(&msg, id, &privKey.PublicKey) {
+			challengeCount <- 0
+			priv := <-privKey
+			if !VerifySolution(&msg, id, &priv.PublicKey) {
 				return
 			} else {
 				r := ServerResponse{Message: "handshake done"}
@@ -119,6 +122,19 @@ func HandleConnectionRequest(w http.ResponseWriter, r *http.Request,
 				HandleSession(idEncoded, conn, recv, ask, retrv, unregister)
 			}
 		}
+	}
+}
+
+func KeepFreshKey(privKey chan *ecdsa.PrivateKey, challengeCount chan int, limit int) {
+	count := 0
+	curKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	for {
+		count += <-challengeCount
+		if count >= limit {
+			curKey, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			count = 0
+		}
+		privKey <- curKey
 	}
 }
 
