@@ -7,22 +7,19 @@ import (
 	"time"
 )
 
+const PORT = 8000
+const MSG_TTL = 60               // second
+const CLEAN_PERIOD = MSG_TTL / 2 // second
+
 type Options struct {
 	Port        int
 	CertFile    string
 	PrivKeyFile string
-	FreshKey    int
 	MessageTTL  time.Duration
 	CleanPeriod time.Duration
 }
 
-const PORT = 8000
-const MSG_TTL = 60               // second
-const CLEAN_PERIOD = MSG_TTL / 2 // second
-const FRESH_KEY = 100            // new key after
-
 func GetOptions() Options {
-	// get ENV vars
 	envCert := os.Getenv("NPCHAT_CERT")
 	envPrivKey := os.Getenv("NPCHAT_PRIVKEY")
 
@@ -44,12 +41,6 @@ func GetOptions() Options {
 		defaultCleanPeriod, _ = strconv.Atoi(envCleanPeriod)
 	}
 
-	envFreshKey := os.Getenv("NPCHAT_FRESH_KEY")
-	defaultFreshKey := FRESH_KEY
-	if envFreshKey != "" {
-		defaultFreshKey, _ = strconv.Atoi(envFreshKey)
-	}
-
 	o := Options{}
 	flag.StringVar(&o.CertFile, "cert", envCert, "must be a relative file path")
 	flag.StringVar(&o.PrivKeyFile, "privkey", envPrivKey, "must be a relative file path")
@@ -61,12 +52,8 @@ func GetOptions() Options {
 	var argCleanPeriod int
 	flag.IntVar(&argCleanPeriod, "cleanperiod", defaultCleanPeriod, "port must be an int")
 
-	var argFreshKey int
-	flag.IntVar(&argFreshKey, "freshkey", defaultFreshKey, "freshkey must be an int")
-
 	flag.Parse()
 
-	o.FreshKey = argFreshKey
 	o.MessageTTL = time.Second * time.Duration(argMsgTtl)
 	o.CleanPeriod = time.Second * time.Duration(argCleanPeriod)
 

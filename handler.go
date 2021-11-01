@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -12,39 +16,60 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func HandleRequest(mc MainChannels, w http.ResponseWriter, r *http.Request, msgTTL time.Duration) {
-	w.Header().Add("Access-Control-Allow-Origin", "*")
+type ServerResponse struct {
+	Message string `json:"message"`
+}
 
-	idEncoded := strings.TrimLeft(r.URL.Path, "/")
-	id, err := base64.RawURLEncoding.DecodeString(idEncoded)
+type ClientMessage struct {
+	Get       string    `json:"get"`
+	Challenge Challenge `json:"challenge"`
+	PublicKey string    `json:"publicKey"`
+	Solution  string    `json:"solution"`
+}
+
+func GetIdFromPath(path string) string {
+	return strings.TrimLeft(path, "/")
+}
+
+func HandlePostRequest(w http.ResponseWriter, r *http.Request, ss *SessionStore, ms *MessageStore, opt *Options) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Error reading body", http.StatusBadRequest)
+		return
+	}
+	r.Body.Close()
+	msg := Message{
+		Body: body,
+		Time: time.Now().Add(opt.MessageTTL),
+	}
+	id := GetIdFromPath(r.URL.Path)
+	ss.Mtx.RLock()
+	isActive := ss.Active[id]
+	recv := ss.Recv[id]
+	ss.Mtx.RUnlock()
+	if isActive {
+		recv <- &msg
+	} else {
+		ms.Store <- MessageWithId{
+			Id:      id,
+			Message: msg,
+		}
+	}
+	resp := ServerResponse{Message: "sent"}
+	rj, _ := json.Marshal(resp)
+	w.Write(rj)
+}
+
+func HandleConnectionRequest(w http.ResponseWriter, r *http.Request, ss *SessionStore, ms *MessageStore) {
+	idEnc := GetIdFromPath(r.URL.Path)
+	id, err := base64.RawURLEncoding.DecodeString(idEnc)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	// handle POST message
-	if r.Method == "POST" {
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Error reading body", http.StatusBadRequest)
-			return
-		}
-		r.Body.Close()
-		mc.Msg <- ChatMessage{
-			Id: idEncoded,
-			Msg: StorableMessage{
-				Body: body,
-				Time: time.Now().Add(msgTTL),
-			},
-		}
-		resp := ServerMessage{Message: "sent"}
-		rj, _ := json.Marshal(resp)
-		w.Write(rj)
-		return
-	}
-
-	ugh := r.Header.Get("upgrade")
-	if ugh == "" {
+	u := r.Header.Get("upgrade")
+	if u == "" {
 		w.Write([]byte("Expected websocket upgrade"))
 		return
 	}
@@ -52,52 +77,70 @@ func HandleRequest(mc MainChannels, w http.ResponseWriter, r *http.Request, msgT
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
+		return
 	}
+	defer conn.Close()
 
-	conn.SetCloseHandler(func(_ int, _ string) error {
-		mc.Unregister <- Session{Id: idEncoded, Conn: conn}
-		return nil
-	})
+	privKey := make(chan *ecdsa.PrivateKey)
+	challengeCount := make(chan int)
+	go KeepFreshKey(privKey, challengeCount, 20)
 
 	for {
 		msgType, msgTxt, err := conn.ReadMessage()
 		if err != nil {
-			conn.Close()
 			return
 		}
 		if msgType != websocket.TextMessage {
-			conn.Close()
 			return
 		}
 		var msg ClientMessage
 		err = json.Unmarshal(msgTxt, &msg)
 		if err != nil {
-			conn.Close()
 			return
 		}
 		if msg.Get == "challenge" {
-			mc.ChallengeCount <- 1
-			privKey := <-mc.PrivKey
-			HandleChallengeRequest(conn, &privKey)
+			challengeCount <- 1
+			priv := <-privKey
+			challenge, err := GetChallenge(priv)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			buf := new(bytes.Buffer)
+			json.NewEncoder(buf).Encode(challenge)
+			err = conn.WriteMessage(websocket.TextMessage, buf.Bytes())
+			if err != nil {
+				return
+			}
 		} else if msg.Solution != "" {
-			mc.ChallengeCount <- 0  // don't increment counter
-			privKey := <-mc.PrivKey // just get key
-			if !VerifySolution(&msg, id, &privKey.PublicKey) {
-				conn.Close()
+			challengeCount <- 0
+			priv := <-privKey
+			if !VerifySolution(&msg, id, &priv.PublicKey) {
 				return
 			} else {
-				r := ServerMessage{Message: "handshake done"}
+				r := ServerResponse{Message: "handshake done"}
 				rj, _ := json.Marshal(r)
 				err := conn.WriteMessage(websocket.TextMessage, rj)
 				if err != nil {
 					log.Println(err)
-					conn.Close()
 					return
 				}
-				mc.Register <- Session{Id: idEncoded, Conn: conn}
-				log.Println(idEncoded, "<- registered")
+				go HandleSession(idEnc, conn, ss, ms)
 			}
 		}
+	}
+}
+
+func KeepFreshKey(privKey chan *ecdsa.PrivateKey, challengeCount chan int, limit int) {
+	count := 0
+	curKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	for {
+		count += <-challengeCount
+		if count >= limit {
+			curKey, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			count = 0
+		}
+		privKey <- curKey
 	}
 }
 

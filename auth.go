@@ -7,16 +7,22 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"log"
 	"math/big"
-
-	"github.com/gorilla/websocket"
 )
 
 const CHALLENGE_LEN = 32
 
-func GenRandomBytes(size int) (blk []byte, err error) {
+type Challenge struct {
+	Txt string `json:"txt"`
+	Sig string `json:"sig"`
+}
+
+type ChallengeWrapper struct {
+	Challenge Challenge `json:"challenge"`
+}
+
+func genRandomBytes(size int) (blk []byte, err error) {
 	blk = make([]byte, size)
 	_, err = rand.Read(blk)
 	if err != nil {
@@ -25,11 +31,10 @@ func GenRandomBytes(size int) (blk []byte, err error) {
 	return
 }
 
-func HandleChallengeRequest(conn *websocket.Conn, priv *ecdsa.PrivateKey) {
-	randBytes, err := GenRandomBytes(CHALLENGE_LEN)
+func GetChallenge(priv *ecdsa.PrivateKey) (ChallengeWrapper, error) {
+	randBytes, err := genRandomBytes(CHALLENGE_LEN)
 	if err != nil {
-		log.Println(err)
-		return
+		return ChallengeWrapper{}, err
 	}
 	h := sha256.New()
 	h.Write(randBytes)
@@ -37,8 +42,7 @@ func HandleChallengeRequest(conn *websocket.Conn, priv *ecdsa.PrivateKey) {
 	prng := rand.Reader
 	r, s, err := ecdsa.Sign(prng, priv, randBytesHash)
 	if err != nil {
-		log.Println(err)
-		return
+		return ChallengeWrapper{}, err
 	}
 	sigBytes := []byte{}
 	sigBytes = append(sigBytes, r.Bytes()...)
@@ -46,14 +50,7 @@ func HandleChallengeRequest(conn *websocket.Conn, priv *ecdsa.PrivateKey) {
 	sigStr := base64.RawURLEncoding.EncodeToString(sigBytes)
 	txt := base64.RawURLEncoding.EncodeToString(randBytesHash)
 	chall := Challenge{txt, sigStr}
-	resp := ServerChallenge{Challenge: chall}
-	buf := new(bytes.Buffer)
-	json.NewEncoder(buf).Encode(resp)
-	err = conn.WriteMessage(websocket.TextMessage, buf.Bytes())
-	if err != nil {
-		log.Println(err)
-		return
-	}
+	return ChallengeWrapper{Challenge: chall}, nil
 }
 
 func VerifySolution(msg *ClientMessage, id []byte, sPub *ecdsa.PublicKey) bool {
@@ -107,7 +104,6 @@ func VerifySolution(msg *ClientMessage, id []byte, sPub *ecdsa.PublicKey) bool {
 		log.Println(err)
 		return false
 	}
-
 	cL := len(cSig) / 2
 	cSigR := new(big.Int).SetBytes(cSig[:cL])
 	cSigS := new(big.Int).SetBytes(cSig[cL:])
