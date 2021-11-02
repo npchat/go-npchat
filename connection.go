@@ -7,11 +7,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"io"
 	"log"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -27,40 +24,7 @@ type ClientMessage struct {
 	Solution  string    `json:"solution"`
 }
 
-func GetIdFromPath(path string) string {
-	return strings.TrimLeft(path, "/")
-}
-
-func HandlePostRequest(w http.ResponseWriter, r *http.Request, ss *SessionStore, ms *MessageStore, opt *Options) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Error reading body", http.StatusBadRequest)
-		return
-	}
-	r.Body.Close()
-	msg := Message{
-		Body: body,
-		Time: time.Now().Add(opt.MessageTTL),
-	}
-	id := GetIdFromPath(r.URL.Path)
-	ss.Mtx.RLock()
-	isActive := ss.Active[id]
-	recv := ss.Recv[id]
-	ss.Mtx.RUnlock()
-	if isActive {
-		recv <- &msg
-	} else {
-		ms.Store <- MessageWithId{
-			Id:      id,
-			Message: msg,
-		}
-	}
-	resp := ServerResponse{Message: "sent"}
-	rj, _ := json.Marshal(resp)
-	w.Write(rj)
-}
-
-func HandleConnectionRequest(w http.ResponseWriter, r *http.Request, ss *SessionStore, ms *MessageStore) {
+func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle) {
 	idEnc := GetIdFromPath(r.URL.Path)
 	id, err := base64.RawURLEncoding.DecodeString(idEnc)
 	if err != nil {
@@ -80,6 +44,12 @@ func HandleConnectionRequest(w http.ResponseWriter, r *http.Request, ss *Session
 		return
 	}
 	defer conn.Close()
+
+	conn.SetCloseHandler(func(_ int, _ string) error {
+		o.GetUser(idEnc).RemoveConnection(conn)
+		log.Println(idEnc, "removed ws conn")
+		return nil
+	})
 
 	privKey := make(chan *ecdsa.PrivateKey)
 	challengeCount := make(chan int)
@@ -125,7 +95,9 @@ func HandleConnectionRequest(w http.ResponseWriter, r *http.Request, ss *Session
 					log.Println(err)
 					return
 				}
-				go HandleSession(idEnc, conn, ss, ms)
+				user := o.GetUser(idEnc)
+				user.AddConnection(conn)
+				user.SendStored()
 			}
 		}
 	}

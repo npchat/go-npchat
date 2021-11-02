@@ -4,38 +4,28 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 )
 
 func main() {
 	opt := GetOptions()
 	log.Printf("%+v'\n", opt)
 
-	ms := MessageStore{
-		M:           make(map[string][]Message),
-		Store:       make(chan MessageWithId),
-		Ask:         make(chan string),
-		Retrv:       make(chan []Message),
+	oracle := Oracle{
+		Users:       make(map[string]*User),
+		Mux:         new(sync.RWMutex),
 		CleanPeriod: opt.CleanPeriod,
+		MsgTTL:      opt.MsgTTL,
 	}
 
-	go ms.Manage()
-	go ms.KeepClean()
-
-	ss := SessionStore{
-		Active:     make(map[string]bool),
-		Recv:       make(map[string]chan *Message),
-		Register:   make(chan Registration),
-		Unregister: make(chan string),
-	}
-
-	go ss.Manage()
+	go oracle.KeepClean()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
 		if r.Method == "POST" {
-			HandlePostRequest(w, r, &ss, &ms, &opt)
+			HandlePost(w, r, &oracle)
 		} else {
-			HandleConnectionRequest(w, r, &ss, &ms)
+			HandleConnection(w, r, &oracle)
 		}
 	})
 

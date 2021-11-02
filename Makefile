@@ -1,5 +1,4 @@
-## Based on
-## https://github.com/chemidy/smallest-secured-golang-docker-image
+## Thanks to https://github.com/chemidy/smallest-secured-golang-docker-image
 
 VERSION=`git rev-parse HEAD`
 BUILD=`date +%FT%T%z`

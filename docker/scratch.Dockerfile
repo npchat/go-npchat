@@ -1,3 +1,5 @@
+## Thanks to https://github.com/chemidy/smallest-secured-golang-docker-image
+
 ############################
 # STEP 1 build executable binary
 ############################
@@ -24,11 +26,6 @@ RUN adduser \
 WORKDIR $GOPATH/src/mypackage/myapp/
 COPY . .
 
-# Until auto provisioning/renewal is implemented
-COPY ./ECC-cert.pem ./ECC-cert.pem
-COPY ./ECC-chain.pem ./ECC-chain.pem
-COPY ./ECC-privkey.pem ./ECC-privkey.pem
-
 # Fetch dependencies.
 RUN go get -d -v
 
@@ -50,10 +47,6 @@ COPY --from=builder /etc/group /etc/group
 
 # Copy our static executable
 COPY --from=builder /go/bin/npchat /go/bin/npchat
-
-COPY ./ECC-cert.pem ./ECC-cert.pem
-COPY ./ECC-chain.pem ./ECC-chain.pem
-COPY ./ECC-privkey.pem ./ECC-privkey.pem
 
 # Use an unprivileged user
 #USER appuser:appuser

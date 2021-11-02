@@ -15,7 +15,7 @@ type Options struct {
 	Port        int
 	CertFile    string
 	PrivKeyFile string
-	MessageTTL  time.Duration
+	MsgTTL      time.Duration
 	CleanPeriod time.Duration
 }
 
@@ -54,7 +54,7 @@ func GetOptions() Options {
 
 	flag.Parse()
 
-	o.MessageTTL = time.Second * time.Duration(argMsgTtl)
+	o.MsgTTL = time.Second * time.Duration(argMsgTtl)
 	o.CleanPeriod = time.Second * time.Duration(argCleanPeriod)
 
 	return o
