@@ -46,8 +46,7 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle) {
 	defer conn.Close()
 
 	conn.SetCloseHandler(func(_ int, _ string) error {
-		o.GetUser(idEnc).RemoveConnection(conn)
-		log.Println(idEnc, "removed ws conn")
+		o.GetUser(idEnc).UnregisterWebSocket(conn)
 		return nil
 	})
 
@@ -96,7 +95,7 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle) {
 					return
 				}
 				user := o.GetUser(idEnc)
-				user.AddConnection(conn)
+				user.RegisterWebSocket(conn)
 				user.SendStored()
 			}
 		}

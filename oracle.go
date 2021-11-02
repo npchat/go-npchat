@@ -35,16 +35,16 @@ func (o *Oracle) KeepClean() {
 	for {
 		o.Mux.Lock()
 		for id, u := range o.Users {
+			keep := []Msg{}
 			for _, m := range u.Msgs {
-				keep := []Msg{}
 				if time.Now().Before(m.Kick) {
 					keep = append(keep, m)
 				}
-				if len(keep) < 1 && !u.Online {
-					delete(o.Users, id)
-				}
-				u.Msgs = keep
 			}
+			if len(keep) < 1 && !u.Online {
+				delete(o.Users, id)
+			}
+			u.Msgs = keep
 		}
 		o.Mux.Unlock()
 		time.Sleep(o.CleanPeriod)

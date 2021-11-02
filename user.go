@@ -26,7 +26,7 @@ type Connection struct {
 	Mux  *sync.Mutex
 }
 
-func (u *User) AddConnection(conn *websocket.Conn) {
+func (u *User) RegisterWebSocket(conn *websocket.Conn) {
 	c := Connection{
 		Sock: conn,
 		Mux:  new(sync.Mutex),
@@ -37,7 +37,7 @@ func (u *User) AddConnection(conn *websocket.Conn) {
 	u.Mux.Unlock()
 }
 
-func (u *User) RemoveConnection(conn *websocket.Conn) {
+func (u *User) UnregisterWebSocket(conn *websocket.Conn) {
 	keep := []Connection{}
 	u.Mux.Lock()
 	for _, c := range u.Conns {
@@ -86,6 +86,7 @@ func (u *User) SendStored() {
 		c.Mux.Unlock()
 	}
 	u.Mux.RUnlock()
+	// clear stored
 	u.Mux.Lock()
 	u.Msgs = []Msg{}
 	u.Mux.Unlock()
