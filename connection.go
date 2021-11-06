@@ -14,14 +14,16 @@ import (
 )
 
 type ServerResponse struct {
-	Message string `json:"message"`
+	Message  string `json:"message"`
+	VapidKey string `json:"vapidKey"`
 }
 
 type ClientMessage struct {
-	Get       string    `json:"get"`
-	Challenge Challenge `json:"challenge"`
-	PublicKey string    `json:"publicKey"`
-	Solution  string    `json:"solution"`
+	Get          string    `json:"get"`
+	Challenge    Challenge `json:"challenge"`
+	PublicKey    string    `json:"publicKey"`
+	Solution     string    `json:"solution"`
+	Subscription string    `json:"subscription"`
 }
 
 func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle) {
@@ -81,22 +83,29 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle) {
 			if err != nil {
 				return
 			}
-		} else if msg.Solution != "" {
+		}
+		if msg.Solution != "" {
 			challengeCount <- 0
 			priv := <-privKey
 			if !VerifySolution(&msg, id, &priv.PublicKey) {
 				return
 			} else {
-				r := ServerResponse{Message: "handshake done"}
+				user := o.GetUser(idEnc)
+				user.Pusher.EnsureKey()
+				r := ServerResponse{Message: "handshake done", VapidKey: user.Pusher.PublicKey}
 				rj, _ := json.Marshal(r)
 				err := conn.WriteMessage(websocket.TextMessage, rj)
 				if err != nil {
 					log.Println(err)
 					return
 				}
-				user := o.GetUser(idEnc)
 				user.RegisterWebSocket(conn)
 				user.SendStored()
+				_, subMsg, _ := conn.ReadMessage()
+				if string(subMsg) != "" {
+					log.Println("got subscription")
+					user.Pusher.AddSubscription(subMsg)
+				}
 			}
 		}
 	}

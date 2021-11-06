@@ -10,10 +10,12 @@ import (
 )
 
 type User struct {
+	Id     string
 	Msgs   []Msg
 	Conns  []Connection
 	Online bool
 	Mux    *sync.RWMutex
+	Pusher Pusher
 }
 
 type Msg struct {
@@ -62,7 +64,8 @@ func (u *User) Send(msg []byte, ttl time.Duration) {
 				log.Println(c.Sock.RemoteAddr(), "failed to send msg", err)
 			}
 		}
-	} else { // offline, store it
+	} else { // offline
+		// store it
 		m := Msg{
 			Body: msg,
 			Kick: time.Now().Add(ttl),
@@ -71,6 +74,8 @@ func (u *User) Send(msg []byte, ttl time.Duration) {
 		u.Msgs = append(u.Msgs, m)
 		u.Mux.Unlock()
 	}
+	// send notification
+	u.Pusher.Push(u.Id, []byte("You've got a message"))
 }
 
 func (u *User) SendStored() {
