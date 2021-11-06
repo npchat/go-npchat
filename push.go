@@ -48,11 +48,9 @@ func (p *Pusher) AddSubscription(subscription []byte) {
 
 func (p *Pusher) Push(subscriber string, message []byte) {
 	if p.Subscription == nil {
-		log.Println("not subscribed for push")
 		return
 	}
-	if time.Now().Before(p.Last.Add(time.Second * 10)) {
-		log.Println("already pushed something")
+	if time.Now().Before(p.Last.Add(time.Minute)) {
 		return
 	}
 	resp, err := webpush.SendNotification(message, p.Subscription, &webpush.Options{
@@ -63,8 +61,6 @@ func (p *Pusher) Push(subscriber string, message []byte) {
 	})
 	if err != nil {
 		log.Println("failed to send push notification", err)
-	} else {
-		log.Println("pushed notification")
 	}
 	resp.Body.Close()
 	p.Last = time.Now()

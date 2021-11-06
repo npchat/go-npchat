@@ -73,9 +73,9 @@ func (u *User) Send(msg []byte, ttl time.Duration) {
 		u.Mux.Lock()
 		u.Msgs = append(u.Msgs, m)
 		u.Mux.Unlock()
+		// send notification
+		u.Pusher.Push(u.Id, []byte("You've got a message"))
 	}
-	// send notification
-	u.Pusher.Push(u.Id, []byte("You've got a message"))
 }
 
 func (u *User) SendStored() {
