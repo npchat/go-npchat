@@ -57,6 +57,14 @@ func (u *User) UnregisterWebSocket(conn *websocket.Conn) {
 }
 
 func (u *User) Send(msg []byte, ttl time.Duration) {
+	// store it
+	m := Msg{
+		Body: msg,
+		Kick: time.Now().Add(ttl),
+	}
+	u.Mux.Lock()
+	u.Msgs = append(u.Msgs, m)
+	u.Mux.Unlock()
 	if u.Online {
 		for _, c := range u.Conns {
 			c.Mux.Lock()
@@ -67,14 +75,6 @@ func (u *User) Send(msg []byte, ttl time.Duration) {
 			}
 		}
 	} else { // offline
-		// store it
-		m := Msg{
-			Body: msg,
-			Kick: time.Now().Add(ttl),
-		}
-		u.Mux.Lock()
-		u.Msgs = append(u.Msgs, m)
-		u.Mux.Unlock()
 		// send notification
 		u.Pusher.Push(u.Id, []byte("You've got a message"))
 	}
@@ -93,10 +93,6 @@ func (u *User) SendStored() {
 		c.Mux.Unlock()
 	}
 	u.Mux.RUnlock()
-	// clear stored
-	u.Mux.Lock()
-	u.Msgs = []Msg{}
-	u.Mux.Unlock()
 }
 
 func GetIdFromPath(path string) string {
