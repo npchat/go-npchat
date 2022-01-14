@@ -1,13 +1,22 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"sync"
+	"time"
 )
 
+type Info struct {
+	Status string        `json:"status"`
+	Uptime time.Duration `json:"uptime"`
+}
+
 func main() {
+	startTime := time.Now()
+
 	opt := GetOptions()
 	log.Printf("%+v'\n", opt)
 
@@ -24,6 +33,8 @@ func main() {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
 		if r.Method == "POST" {
 			HandlePost(w, r, &oracle)
+		} else if r.URL.Path == "/info" {
+			handleInfo(w, &startTime)
 		} else {
 			HandleConnection(w, r, &oracle, &opt)
 		}
@@ -43,4 +54,13 @@ func main() {
 			log.Println("failed to start HTTP server", err)
 		}
 	}
+}
+
+func handleInfo(w http.ResponseWriter, startTime *time.Time) {
+	w.Header().Add("Content-Type", "application/json")
+	info, _ := json.Marshal(Info{
+		Status: "healthy",
+		Uptime: time.Duration(time.Since(*startTime).Seconds()),
+	})
+	w.Write(info)
 }
