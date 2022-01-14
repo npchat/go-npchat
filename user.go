@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ type User struct {
 	Online bool
 	Mux    *sync.RWMutex
 	Pusher Pusher
+	Data   string
 }
 
 type Msg struct {
@@ -99,4 +101,20 @@ func (u *User) SendStored() {
 
 func GetIdFromPath(path string) string {
 	return strings.TrimLeft(path, "/")
+}
+
+func (u *User) SetData(data string, lenMax int) error {
+	if len(data) > lenMax {
+		return fmt.Errorf("max length of %v exceeded for data: %v", lenMax, data)
+	}
+	u.Mux.Lock()
+	u.Data = data
+	u.Mux.Unlock()
+	return nil
+}
+
+func (u *User) GetData() string {
+	u.Mux.RLock()
+	defer u.Mux.RUnlock()
+	return u.Data
 }

@@ -10,6 +10,7 @@ import (
 const PORT = 8000
 const MSG_TTL = 60               // second
 const CLEAN_PERIOD = MSG_TTL / 2 // second
+const DATA_LEN_MAX = 2048        // 2MB
 
 type Options struct {
 	Port        int
@@ -17,6 +18,7 @@ type Options struct {
 	PrivKeyFile string
 	MsgTTL      time.Duration
 	CleanPeriod time.Duration
+	DataLenMax  int
 }
 
 func GetOptions() Options {
@@ -27,6 +29,12 @@ func GetOptions() Options {
 	defaultPort := PORT
 	if envPort != "" {
 		defaultPort, _ = strconv.Atoi(envPort)
+	}
+
+	envDataLenMax := os.Getenv("NPCHAT_DATA_LEN_MAX")
+	defaultDataLenMax := DATA_LEN_MAX
+	if envDataLenMax != "" {
+		defaultDataLenMax, _ = strconv.Atoi(envDataLenMax)
 	}
 
 	envMsgTTL := os.Getenv("NPCHAT_MSG_TTL") // second
@@ -45,6 +53,7 @@ func GetOptions() Options {
 	flag.StringVar(&o.CertFile, "cert", envCert, "must be a relative file path")
 	flag.StringVar(&o.PrivKeyFile, "privkey", envPrivKey, "must be a relative file path")
 	flag.IntVar(&o.Port, "port", defaultPort, "port must be an int")
+	flag.IntVar(&o.DataLenMax, "datalenmax", defaultDataLenMax, "datalenmax must be an int")
 
 	var argMsgTtl int
 	flag.IntVar(&argMsgTtl, "msgttl", defaultMsgTtl, "port must be an int")
