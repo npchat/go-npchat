@@ -25,7 +25,7 @@ func main() {
 		if r.Method == "POST" {
 			HandlePost(w, r, &oracle)
 		} else {
-			HandleConnection(w, r, &oracle)
+			HandleConnection(w, r, &oracle, &opt)
 		}
 	})
 

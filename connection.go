@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -14,17 +15,23 @@ import (
 )
 
 type ServerResponse struct {
-	Message string `json:"message"`
+	Message  interface{} `json:"message"`
+	VapidKey interface{} `json:"vapidKey"`
+	Data     interface{} `json:"data"`
+	Error    interface{} `json:"error"`
 }
 
 type ClientMessage struct {
-	Get       string    `json:"get"`
-	Challenge Challenge `json:"challenge"`
-	PublicKey string    `json:"publicKey"`
-	Solution  string    `json:"solution"`
+	Get          string    `json:"get"`
+	Set          string    `json:"set"`
+	Challenge    Challenge `json:"challenge"`
+	PublicKey    string    `json:"publicKey"`
+	Solution     string    `json:"solution"`
+	Subscription []byte    `json:"subscription"`
+	Data         string    `json:"data"`
 }
 
-func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle) {
+func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Options) {
 	idEnc := GetIdFromPath(r.URL.Path)
 	id, err := base64.RawURLEncoding.DecodeString(idEnc)
 	if err != nil {
@@ -67,6 +74,7 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle) {
 		if err != nil {
 			return
 		}
+
 		if msg.Get == "challenge" {
 			challengeCount <- 1
 			priv := <-privKey
@@ -81,22 +89,76 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle) {
 			if err != nil {
 				return
 			}
-		} else if msg.Solution != "" {
+		}
+
+		if msg.Solution != "" {
 			challengeCount <- 0
 			priv := <-privKey
 			if !VerifySolution(&msg, id, &priv.PublicKey) {
 				return
 			} else {
-				r := ServerResponse{Message: "handshake done"}
+				user := o.GetUser(idEnc)
+				user.Pusher.EnsureKey()
+				r := ServerResponse{
+					Message:  "handshake done",
+					VapidKey: user.Pusher.PublicKey,
+					Data:     user.GetData(),
+				}
 				rj, _ := json.Marshal(r)
 				err := conn.WriteMessage(websocket.TextMessage, rj)
 				if err != nil {
 					log.Println(err)
 					return
 				}
-				user := o.GetUser(idEnc)
 				user.RegisterWebSocket(conn)
 				user.SendStored()
+
+				// authenticated message loop
+				for {
+					msgType, msgText, err := conn.ReadMessage()
+
+					if err != nil {
+						conn.Close()
+						return
+					}
+
+					if msgType != websocket.TextMessage {
+						log.Println("bad message", msgType, msgText)
+						return
+					}
+
+					var msg ClientMessage
+					err = json.Unmarshal(msgText, &msg)
+					if err != nil {
+						log.Println("failed to unmarshal message", err)
+						return
+					}
+
+					if string(msg.Subscription) != "" {
+						log.Println("got subscription")
+						user.Pusher.AddSubscription(msg.Subscription)
+					}
+
+					if msg.Get == "data" {
+						log.Println("got request for data")
+						resp, _ := json.Marshal(ServerResponse{
+							Data: user.GetData(),
+						})
+						conn.WriteMessage(websocket.TextMessage, resp)
+					}
+
+					if msg.Set == "data" {
+						err := user.SetData(msg.Data, opt.DataLenMax)
+						if err != nil {
+							log.Println("failed to set data", err)
+							errResp, _ := json.Marshal(ServerResponse{
+								Error: fmt.Sprintf("%v", err),
+							})
+							conn.WriteMessage(websocket.TextMessage, errResp)
+						}
+					}
+
+				}
 			}
 		}
 	}

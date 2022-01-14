@@ -41,7 +41,7 @@ func (o *Oracle) KeepClean() {
 					keep = append(keep, m)
 				}
 			}
-			if len(keep) < 1 && !u.Online {
+			if len(keep) < 1 && !u.Online && u.Pusher.Subscription == nil {
 				delete(o.Users, id)
 			}
 			u.Msgs = keep
