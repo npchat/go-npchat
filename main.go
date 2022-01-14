@@ -10,8 +10,10 @@ import (
 )
 
 type Info struct {
-	Status string        `json:"status"`
-	Uptime time.Duration `json:"uptime"`
+	Status     string    `json:"status"`
+	StartTime  time.Time `json:"startTime"`
+	DataLenMax int       `json:"dataLenMax"`
+	MsgTTL     int       `json:"msgTtl"`
 }
 
 func main() {
@@ -33,11 +35,13 @@ func main() {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
 		if r.Method == "POST" {
 			HandlePost(w, r, &oracle)
-		} else if r.URL.Path == "/info" {
-			handleInfo(w, &startTime)
-		} else {
-			HandleConnection(w, r, &oracle, &opt)
+			return
 		}
+		if r.URL.Path == "/info" {
+			handleInfo(w, &startTime, &opt)
+			return
+		}
+		HandleConnection(w, r, &oracle, &opt)
 	})
 
 	addr := fmt.Sprintf(":%v", opt.Port)
@@ -56,11 +60,13 @@ func main() {
 	}
 }
 
-func handleInfo(w http.ResponseWriter, startTime *time.Time) {
+func handleInfo(w http.ResponseWriter, startTime *time.Time, opt *Options) {
 	w.Header().Add("Content-Type", "application/json")
 	info, _ := json.Marshal(Info{
-		Status: "healthy",
-		Uptime: time.Duration(time.Since(*startTime).Seconds()),
+		Status:     "healthy",
+		StartTime:  *startTime,
+		DataLenMax: opt.DataLenMax,
+		MsgTTL:     int(opt.MsgTTL.Seconds()),
 	})
 	w.Write(info)
 }

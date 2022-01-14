@@ -35,7 +35,6 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 	idEnc := GetIdFromPath(r.URL.Path)
 	id, err := base64.RawURLEncoding.DecodeString(idEnc)
 	if err != nil {
-		log.Println(err)
 		return
 	}
 
