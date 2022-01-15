@@ -66,25 +66,25 @@ func (o *Oracle) KeepClean() {
 			}
 			u.Msgs = keep
 		}
-		err := o.PersistState()
+		err := o.WriteState()
 		if err != nil {
-			log.Println("failed to persist state", err)
+			log.Println("failed to write state", err)
 		}
 		o.Mux.Unlock()
 		time.Sleep(o.CleanPeriod)
 	}
 }
 
-func (o *Oracle) PersistState() error {
+func (o *Oracle) WriteState() error {
 	if o.PersistFile != "" {
-		return Save(o.PersistFile, o)
+		return Write(o.PersistFile, o)
 	}
 	return nil
 }
 
-func (o *Oracle) LoadState() error {
+func (o *Oracle) ReadState() error {
 	if o.PersistFile != "" {
-		return Load(o.PersistFile, o)
+		return Read(o.PersistFile, o)
 	}
 	return nil
 }

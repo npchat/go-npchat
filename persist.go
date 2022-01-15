@@ -11,7 +11,7 @@ import (
 var lock sync.Mutex
 
 func Marshal(v interface{}) (io.Reader, error) {
-	b, err := json.MarshalIndent(v, "", "\t")
+	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +22,7 @@ func Unmarshal(r io.Reader, v interface{}) error {
 	return json.NewDecoder(r).Decode(v)
 }
 
-func Save(path string, v interface{}) error {
+func Write(path string, v interface{}) error {
 	lock.Lock()
 	defer lock.Unlock()
 	f, err := os.Create(path)
@@ -38,7 +38,7 @@ func Save(path string, v interface{}) error {
 	return err
 }
 
-func Load(path string, v interface{}) error {
+func Read(path string, v interface{}) error {
 	lock.Lock()
 	defer lock.Unlock()
 	f, err := os.Open(path)

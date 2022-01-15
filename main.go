@@ -31,7 +31,7 @@ func main() {
 		PersistFile: opt.PersistFile,
 	}
 
-	oracle.LoadState()
+	oracle.ReadState()
 
 	go oracle.KeepClean()
 
