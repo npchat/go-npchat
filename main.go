@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -19,7 +20,7 @@ type Info struct {
 func main() {
 	startTime := time.Now()
 
-	opt := GetOptions()
+	opt := LoadOptions()
 	log.Printf("%+v'\n", opt)
 
 	oracle := Oracle{
@@ -62,11 +63,19 @@ func main() {
 
 func handleInfo(w http.ResponseWriter, startTime *time.Time, opt *Options) {
 	w.Header().Add("Content-Type", "application/json")
-	info, _ := json.Marshal(Info{
+	info, _ := json.MarshalIndent(Info{
 		Status:     "healthy",
 		StartTime:  *startTime,
 		DataLenMax: opt.DataLenMax,
 		MsgTTL:     int(opt.MsgTTL.Seconds()),
-	})
+	}, "", "\t")
 	w.Write(info)
+}
+
+func GetIdFromPath(path string) string {
+	return strings.TrimLeft(path, "/")
+}
+
+func ValidateId(id string) bool {
+	return len(id) == 32
 }

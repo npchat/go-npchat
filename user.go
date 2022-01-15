@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -93,10 +92,6 @@ func (u *User) SendStored() {
 		c.Mux.Unlock()
 	}
 	u.Mux.RUnlock()
-}
-
-func GetIdFromPath(path string) string {
-	return strings.TrimLeft(path, "/")
 }
 
 func (u *User) SetData(data string, lenMax int) error {

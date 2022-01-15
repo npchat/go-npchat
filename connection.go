@@ -33,6 +33,12 @@ type ClientMessage struct {
 
 func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Options) {
 	idEnc := GetIdFromPath(r.URL.Path)
+
+	if !ValidateId(idEnc) {
+		http.Error(w, fmt.Sprintf("Invalid ID %v", idEnc), http.StatusBadRequest)
+		return
+	}
+
 	id, err := base64.RawURLEncoding.DecodeString(idEnc)
 	if err != nil {
 		return
@@ -40,7 +46,7 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 
 	u := r.Header.Get("upgrade")
 	if u == "" {
-		w.Write([]byte("Expected websocket upgrade"))
+		http.Error(w, "Expected websocket upgrade", http.StatusBadRequest)
 		return
 	}
 

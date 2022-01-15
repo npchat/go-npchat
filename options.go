@@ -21,7 +21,7 @@ type Options struct {
 	DataLenMax  int
 }
 
-func GetOptions() Options {
+func LoadOptions() Options {
 	envCert := os.Getenv("NPCHAT_CERT")
 	envPrivKey := os.Getenv("NPCHAT_PRIVKEY")
 

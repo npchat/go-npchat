@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 )
@@ -14,6 +15,10 @@ func HandlePost(w http.ResponseWriter, r *http.Request, o *Oracle) {
 	}
 	r.Body.Close()
 	id := GetIdFromPath(r.URL.Path)
+	if !ValidateId(id) {
+		http.Error(w, fmt.Sprintf("Invalid ID %v", id), http.StatusBadRequest)
+		return
+	}
 	o.GetUser(id).Send(body, o.MsgTTL)
 	resp := ServerResponse{Message: "sent"}
 	rj, _ := json.Marshal(resp)
