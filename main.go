@@ -28,7 +28,10 @@ func main() {
 		Mux:         new(sync.RWMutex),
 		CleanPeriod: opt.CleanPeriod,
 		MsgTTL:      opt.MsgTTL,
+		PersistFile: opt.PersistFile,
 	}
+
+	oracle.LoadState()
 
 	go oracle.KeepClean()
 
@@ -74,8 +77,4 @@ func handleInfo(w http.ResponseWriter, startTime *time.Time, opt *Options) {
 
 func GetIdFromPath(path string) string {
 	return strings.TrimLeft(path, "/")
-}
-
-func ValidateId(id string) bool {
-	return len(id) == 32
 }

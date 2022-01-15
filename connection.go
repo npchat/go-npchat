@@ -34,19 +34,19 @@ type ClientMessage struct {
 func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Options) {
 	idEnc := GetIdFromPath(r.URL.Path)
 
-	if !ValidateId(idEnc) {
-		http.Error(w, fmt.Sprintf("Invalid ID %v", idEnc), http.StatusBadRequest)
-		return
-	}
-
 	id, err := base64.RawURLEncoding.DecodeString(idEnc)
 	if err != nil {
 		return
 	}
 
+	if len(id) != 32 {
+		http.Error(w, fmt.Sprintf("invalid id %v", idEnc), http.StatusBadRequest)
+		return
+	}
+
 	u := r.Header.Get("upgrade")
 	if u == "" {
-		http.Error(w, "Expected websocket upgrade", http.StatusBadRequest)
+		http.Error(w, "expected websocket upgrade", http.StatusBadRequest)
 		return
 	}
 
@@ -58,7 +58,12 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 	defer conn.Close()
 
 	conn.SetCloseHandler(func(_ int, _ string) error {
-		o.GetUser(idEnc).UnregisterWebSocket(conn)
+		user, err := o.GetUser(idEnc)
+		if err != nil {
+			log.Println("failed to find user", idEnc)
+			return err
+		}
+		user.UnregisterWebSocket(conn)
 		return nil
 	})
 
@@ -102,7 +107,11 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 			if !VerifySolution(&msg, id, &priv.PublicKey) {
 				return
 			} else {
-				user := o.GetUser(idEnc)
+				user, err := o.GetUser(idEnc)
+				if err != nil {
+					log.Println("failed to find user", idEnc)
+					return
+				}
 				user.Pusher.EnsureKey()
 				r := ServerResponse{
 					Message:  "handshake done",
@@ -110,7 +119,7 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 					Data:     user.GetData(),
 				}
 				rj, _ := json.Marshal(r)
-				err := conn.WriteMessage(websocket.TextMessage, rj)
+				err = conn.WriteMessage(websocket.TextMessage, rj)
 				if err != nil {
 					log.Println(err)
 					return
@@ -162,7 +171,6 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 							conn.WriteMessage(websocket.TextMessage, errResp)
 						}
 					}
-
 				}
 			}
 		}

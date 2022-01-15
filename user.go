@@ -12,9 +12,9 @@ import (
 type User struct {
 	Id     string
 	Msgs   []Msg
-	Conns  []Connection
-	Online bool
-	Mux    *sync.RWMutex
+	Conns  []Connection  `json:"-"`
+	Online bool          `json:"-"`
+	Mux    *sync.RWMutex `json:"-"`
 	Pusher Pusher
 	Data   string
 }
