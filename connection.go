@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/SherClockHolmes/webpush-go"
 	"github.com/gorilla/websocket"
 )
 
@@ -22,13 +23,13 @@ type ServerResponse struct {
 }
 
 type ClientMessage struct {
-	Get          string    `json:"get"`
-	Set          string    `json:"set"`
-	Challenge    Challenge `json:"challenge"`
-	PublicKey    string    `json:"publicKey"`
-	Solution     string    `json:"solution"`
-	Subscription []byte    `json:"subscription"`
-	Data         string    `json:"data"`
+	Get          string               `json:"get"`
+	Set          string               `json:"set"`
+	Challenge    Challenge            `json:"challenge"`
+	PublicKey    string               `json:"publicKey"`
+	Solution     string               `json:"solution"`
+	Subscription webpush.Subscription `json:"subscription"`
+	Data         string               `json:"data"`
 }
 
 func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Options) {
@@ -148,13 +149,11 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 						return
 					}
 
-					if string(msg.Subscription) != "" {
-						log.Println("got subscription")
-						user.Pusher.AddSubscription(msg.Subscription)
+					if msg.Subscription.Endpoint != "" {
+						user.Pusher.AddSubscription(&msg.Subscription)
 					}
 
 					if msg.Get == "data" {
-						log.Println("got request for data")
 						resp, _ := json.Marshal(ServerResponse{
 							Data: user.GetData(),
 						})

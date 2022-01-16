@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"time"
 
@@ -13,10 +12,6 @@ type Pusher struct {
 	PrivateKey   string
 	PublicKey    string
 	Last         time.Time
-}
-
-type SubscriptionWrapper struct {
-	Subscription *webpush.Subscription `json:"subscription"`
 }
 
 func (p *Pusher) GenerateKeys() {
@@ -35,15 +30,9 @@ func (p *Pusher) EnsureKey() {
 	}
 }
 
-func (p *Pusher) AddSubscription(subscription []byte) {
-	s := &SubscriptionWrapper{}
-	err := json.Unmarshal(subscription, s)
-	if err != nil {
-		log.Println("failed to add subscription", err)
-	} else {
-		p.Subscription = s.Subscription
-		p.Last = time.Now()
-	}
+func (p *Pusher) AddSubscription(subscription *webpush.Subscription) {
+	p.Subscription = subscription
+	p.Last = time.Now()
 }
 
 func (p *Pusher) Push(subscriber string, message []byte) {
