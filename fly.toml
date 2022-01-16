@@ -1,0 +1,33 @@
+# fly.toml file generated for wispy-feather-9047 on 2022-01-16T16:19:53+01:00
+
+app = "wispy-feather-9047"
+
+[env]
+  NPCHAT_PORT = 8080
+  NPCHAT_PERSIST = "" # no volume, no persistence
+  NPCHAT_MSG_TTL = 432000 # 5 days
+  NPCHAT_USER_TTL = 2592000 # 30 days
+  NPCHAT_CLEAN_PERIOD = 300 # 5 minutes
+
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+
+  [services.concurrency]
+    hard_limit = 25
+    soft_limit = 20
+    type = "connections"
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+  [[services.tcp_checks]]
+    grace_period = "1s"
+    interval = "15s"
+    restart_limit = 0
+    timeout = "2s"

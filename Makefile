@@ -23,7 +23,7 @@ build:docker-pull
 	@printf "\033[32m\xE2\x9c\x93 Build go-npchat\n\033[0m"
 	$(eval BUILDER_IMAGE=$(shell docker inspect --format='{{index .RepoDigests 0}}' golang:alpine))
 	@export DOCKER_CONTENT_TRUST=1
-	@docker build -f docker/scratch.Dockerfile --build-arg "BUILDER_IMAGE=$(BUILDER_IMAGE)" -t go-npchat .
+	@docker build --build-arg "BUILDER_IMAGE=$(BUILDER_IMAGE)" -t go-npchat .
 
 ## - List go-npchat docker images
 .PHONY: ls

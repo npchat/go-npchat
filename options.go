@@ -30,8 +30,8 @@ func LoadOptions() Options {
 	envCert := os.Getenv(PREFIX + "CERT")
 	envPrivKey := os.Getenv(PREFIX + "PRIVKEY")
 
-	defaultPersist := os.Getenv(PREFIX + "PERSIST")
-	if defaultPersist == "" {
+	defaultPersist, envPersistIsSet := os.LookupEnv(PREFIX + "PERSIST")
+	if !envPersistIsSet {
 		defaultPersist = PERSIST_FILE
 	}
 
