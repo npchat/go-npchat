@@ -9,11 +9,9 @@ import (
 )
 
 type Oracle struct {
-	Users       map[string]*User
-	Mux         *sync.RWMutex `json:"-"`
-	CleanPeriod time.Duration `json:"-"`
-	MsgTTL      time.Duration `json:"-"`
-	PersistFile string        `json:"-"`
+	Users   map[string]*User
+	Mux     *sync.RWMutex `json:"-"`
+	Options *Options      `json:"-"`
 }
 
 func (o *Oracle) GetUser(id string) (*User, error) {
@@ -57,34 +55,38 @@ func (o *Oracle) KeepClean() {
 				}
 			}
 			// remove user if:
-			// has no messages
-			// is offline
-			// has no push subscription
-			// has no stored data
-			if len(keep) < 1 && !u.Online && u.Pusher.Subscription == nil && u.Data == "" {
+			// is offline && (
+			// last connection older than UserTTL ||
+			// has no messages &&
+			// has no push subscription &&
+			// has no stored data )
+			if !u.Online && (time.Now().After(u.LastConnection.Add(o.Options.UserTTL)) ||
+				len(keep) < 1 && u.Pusher.Subscription == nil && u.Data == "") {
 				delete(o.Users, id)
+				log.Println("cleaned up", id)
+			} else {
+				u.Msgs = keep
 			}
-			u.Msgs = keep
 		}
 		err := o.WriteState()
 		if err != nil {
 			log.Println("failed to write state", err)
 		}
 		o.Mux.Unlock()
-		time.Sleep(o.CleanPeriod)
+		time.Sleep(o.Options.CleanPeriod)
 	}
 }
 
 func (o *Oracle) WriteState() error {
-	if o.PersistFile != "" {
-		return Write(o.PersistFile, o)
+	if o.Options.PersistFile != "" {
+		return Write(o.Options.PersistFile, o)
 	}
 	return nil
 }
 
 func (o *Oracle) ReadState() error {
-	if o.PersistFile != "" {
-		return Read(o.PersistFile, o)
+	if o.Options.PersistFile != "" {
+		return Read(o.Options.PersistFile, o)
 	}
 	return nil
 }

@@ -10,13 +10,14 @@ import (
 )
 
 type User struct {
-	Id     string
-	Msgs   []Msg
-	Conns  []Connection  `json:"-"`
-	Online bool          `json:"-"`
-	Mux    *sync.RWMutex `json:"-"`
-	Pusher Pusher
-	Data   string
+	Id             string
+	Msgs           []Msg
+	Conns          []Connection  `json:"-"`
+	Online         bool          `json:"-"`
+	Mux            *sync.RWMutex `json:"-"`
+	Pusher         Pusher
+	Data           string
+	LastConnection time.Time
 }
 
 type Msg struct {
@@ -37,6 +38,7 @@ func (u *User) RegisterWebSocket(conn *websocket.Conn) {
 	u.Mux.Lock()
 	u.Conns = append(u.Conns, c)
 	u.Online = true
+	u.LastConnection = time.Now()
 	u.Mux.Unlock()
 }
 
@@ -52,6 +54,7 @@ func (u *User) UnregisterWebSocket(conn *websocket.Conn) {
 		u.Online = false
 	}
 	u.Conns = keep
+	u.LastConnection = time.Now()
 	u.Mux.Unlock()
 }
 

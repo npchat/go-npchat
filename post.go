@@ -19,7 +19,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request, o *Oracle) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	user.Send(body, o.MsgTTL)
+	user.Send(body, o.Options.MsgTTL)
 	resp := ServerResponse{Message: "sent"}
 	rj, _ := json.Marshal(resp)
 	w.Write(rj)

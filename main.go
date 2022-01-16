@@ -15,6 +15,7 @@ type Info struct {
 	StartTime  time.Time `json:"startTime"`
 	DataLenMax int       `json:"dataLenMax"`
 	MsgTTL     int       `json:"msgTtl"`
+	UserTTL    int       `json:"userTtl"`
 }
 
 func main() {
@@ -24,11 +25,9 @@ func main() {
 	log.Printf("%+v'\n", opt)
 
 	oracle := Oracle{
-		Users:       make(map[string]*User),
-		Mux:         new(sync.RWMutex),
-		CleanPeriod: opt.CleanPeriod,
-		MsgTTL:      opt.MsgTTL,
-		PersistFile: opt.PersistFile,
+		Users:   make(map[string]*User),
+		Mux:     new(sync.RWMutex),
+		Options: &opt,
 	}
 
 	oracle.ReadState()
@@ -71,6 +70,7 @@ func handleInfo(w http.ResponseWriter, startTime *time.Time, opt *Options) {
 		StartTime:  *startTime,
 		DataLenMax: opt.DataLenMax,
 		MsgTTL:     int(opt.MsgTTL.Seconds()),
+		UserTTL:    int(opt.UserTTL.Seconds()),
 	}, "", "\t")
 	w.Write(info)
 }
