@@ -1,10 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,23 +9,19 @@ import (
 
 	"github.com/SherClockHolmes/webpush-go"
 	"github.com/gorilla/websocket"
+	"github.com/shamaton/msgpack/v2"
 )
 
-type ServerResponse struct {
-	Message  interface{} `json:"message"`
-	VapidKey interface{} `json:"vapidKey"`
-	Data     interface{} `json:"data"`
-	Error    interface{} `json:"error"`
+type Response struct {
+	Message  interface{} `msgpack:"message"`
+	VapidKey interface{} `msgpack:"vapidKey"`
+	Data     []byte      `msgpack:"data"`
+	Error    interface{} `msgpack:"error"`
 }
 
-type ClientMessage struct {
-	Get          string               `json:"get"`
-	Set          string               `json:"set"`
-	Challenge    Challenge            `json:"challenge"`
-	PublicKey    string               `json:"publicKey"`
-	Solution     string               `json:"solution"`
-	Subscription webpush.Subscription `json:"subscription"`
-	Data         string               `json:"data"`
+type Message struct {
+	PushSubscription string `msgpack:"sub"`
+	Data             []byte `msgpack:"data"`
 }
 
 func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Options) {
@@ -68,124 +60,95 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 		return nil
 	})
 
-	privKey := make(chan *ecdsa.PrivateKey)
-	challengeCount := make(chan int)
-	go KeepFreshKey(privKey, challengeCount, 20)
-
 	for {
-		msgType, msgTxt, err := conn.ReadMessage()
+		authMsgType, authMsgBin, err := conn.ReadMessage()
 		if err != nil {
 			return
 		}
-		if msgType != websocket.TextMessage {
+		if authMsgType != websocket.BinaryMessage {
+			msg, _ := msgpack.Marshal(Response{
+				Message: "send only binary data serialised with msgpack",
+				Error:   "invalid message type",
+			})
+			conn.WriteMessage(websocket.BinaryMessage, msg)
 			return
 		}
-		var msg ClientMessage
-		err = json.Unmarshal(msgTxt, &msg)
+		var authMsg AuthMessage
+		err = msgpack.Unmarshal(authMsgBin, &authMsg)
 		if err != nil {
+			log.Println("failed to unmarshal auth", err)
+			msg, _ := msgpack.Marshal(Response{
+				Message: "failed to unmarshal message",
+				Error:   err.Error(),
+			})
+			conn.WriteMessage(websocket.BinaryMessage, msg)
+			return
+		}
+		if !VerifyAuthMessage(&authMsg, id) {
+			msg, _ := msgpack.Marshal(Response{
+				Error: "unauthorized",
+			})
+			conn.WriteMessage(websocket.BinaryMessage, msg)
 			return
 		}
 
-		if msg.Get == "challenge" {
-			challengeCount <- 1
-			priv := <-privKey
-			challenge, err := GetChallenge(priv)
+		user, err := o.GetUser(idEnc)
+		if err != nil {
+			log.Println("failed to find user", idEnc)
+			return
+		}
+
+		user.Pusher.EnsureKey()
+
+		resp := Response{
+			Message:  "authed",
+			VapidKey: user.Pusher.PublicKey,
+			Data:     user.GetData(),
+		}
+		respBin, _ := msgpack.Marshal(resp)
+		conn.WriteMessage(websocket.BinaryMessage, respBin)
+
+		user.RegisterWebSocket(conn)
+		user.SendStored()
+
+		// authed msg loop
+		for {
+			msgType, msgBin, err := conn.ReadMessage()
 			if err != nil {
-				log.Println(err)
+				conn.Close()
 				return
 			}
-			buf := new(bytes.Buffer)
-			json.NewEncoder(buf).Encode(challenge)
-			err = conn.WriteMessage(websocket.TextMessage, buf.Bytes())
+
+			if msgType != websocket.BinaryMessage {
+				msg, _ := msgpack.Marshal(Response{
+					Message: "send only binary data serialised with msgpack",
+					Error:   "invalid message type",
+				})
+				conn.WriteMessage(websocket.BinaryMessage, msg)
+				return
+			}
+
+			var msg Message
+			err = msgpack.Unmarshal(msgBin, &msg)
 			if err != nil {
+				log.Println("failed to unmarshal msg", err)
 				return
 			}
-		}
 
-		if msg.Solution != "" {
-			challengeCount <- 0
-			priv := <-privKey
-			if !VerifySolution(&msg, id, &priv.PublicKey) {
-				return
-			} else {
-				user, err := o.GetUser(idEnc)
+			if msg.PushSubscription != "" {
+				log.Println("got sub", msg.PushSubscription)
+				sub := webpush.Subscription{}
+				err := json.Unmarshal([]byte(msg.PushSubscription), &sub)
 				if err != nil {
-					log.Println("failed to find user", idEnc)
-					return
+					log.Println("failed to unmarshal push subscription")
 				}
-				user.Pusher.EnsureKey()
-				r := ServerResponse{
-					Message:  "handshake done",
-					VapidKey: user.Pusher.PublicKey,
-					Data:     user.GetData(),
-				}
-				rj, _ := json.Marshal(r)
-				err = conn.WriteMessage(websocket.TextMessage, rj)
-				if err != nil {
-					log.Println(err)
-					return
-				}
-				user.RegisterWebSocket(conn)
-				user.SendStored()
+				user.Pusher.AddSubscription(&sub)
+			}
 
-				// authenticated message loop
-				for {
-					msgType, msgText, err := conn.ReadMessage()
-
-					if err != nil {
-						conn.Close()
-						return
-					}
-
-					if msgType != websocket.TextMessage {
-						log.Println("bad message", msgType, msgText)
-						return
-					}
-
-					var msg ClientMessage
-					err = json.Unmarshal(msgText, &msg)
-					if err != nil {
-						log.Println("failed to unmarshal message", err)
-						return
-					}
-
-					if msg.Subscription.Endpoint != "" {
-						user.Pusher.AddSubscription(&msg.Subscription)
-					}
-
-					if msg.Get == "data" {
-						resp, _ := json.Marshal(ServerResponse{
-							Data: user.GetData(),
-						})
-						conn.WriteMessage(websocket.TextMessage, resp)
-					}
-
-					if msg.Set == "data" {
-						err := user.SetData(msg.Data, opt.DataLenMax)
-						if err != nil {
-							log.Println("failed to set data", err)
-							errResp, _ := json.Marshal(ServerResponse{
-								Error: fmt.Sprintf("%v", err),
-							})
-							conn.WriteMessage(websocket.TextMessage, errResp)
-						}
-					}
-				}
+			if msg.Data != nil && len(msg.Data) <= opt.DataLenMax {
+				user.SetData(msg.Data)
 			}
 		}
-	}
-}
-
-func KeepFreshKey(privKey chan *ecdsa.PrivateKey, challengeCount chan int, limit int) {
-	count := 0
-	curKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	for {
-		count += <-challengeCount
-		if count >= limit {
-			curKey, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-			count = 0
-		}
-		privKey <- curKey
 	}
 }
 
