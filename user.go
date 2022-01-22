@@ -24,22 +24,10 @@ type Msg struct {
 	Kick time.Time // time to kick from storage
 }
 
-type MessageBody struct {
-	From []byte `msgpack:"f"`
-}
-
 type Connection struct {
 	Sock *websocket.Conn
 	Mux  *sync.Mutex
 }
-
-/*
-Type: "message"
-From: "{publicKeyHash}"
-type Notification struct {
-	Type string
-	From string
-}*/
 
 func (u *User) RegisterWebSocket(conn *websocket.Conn) {
 	c := Connection{
@@ -81,7 +69,7 @@ func (u *User) Send(msg []byte, ttl time.Duration) {
 	if u.Online {
 		for _, c := range u.Conns {
 			c.Mux.Lock()
-			err := c.Sock.WriteMessage(websocket.TextMessage, msg)
+			err := c.Sock.WriteMessage(websocket.BinaryMessage, msg)
 			c.Mux.Unlock()
 			if err != nil {
 				log.Println(c.Sock.RemoteAddr(), "failed to send msg", err)
@@ -89,11 +77,7 @@ func (u *User) Send(msg []byte, ttl time.Duration) {
 		}
 	} else { // offline
 		// send notification
-		u.Pusher.Push(u.Id, []byte("You've got a message"))
-		/*
-			TODO: Unmarshal received msg, get 'from' id
-			& serialise rich notification
-		*/
+		u.Pusher.Push(u.Id, []byte("Received message"))
 	}
 }
 
