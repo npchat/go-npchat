@@ -1,10 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,6 +9,7 @@ import (
 
 	"github.com/SherClockHolmes/webpush-go"
 	"github.com/gorilla/websocket"
+	"github.com/shamaton/msgpack/v2"
 )
 
 type ServerResponse struct {
@@ -22,14 +19,15 @@ type ServerResponse struct {
 	Error    interface{} `json:"error"`
 }
 
-type ClientMessage struct {
-	Get          string               `json:"get"`
-	Set          string               `json:"set"`
-	Challenge    Challenge            `json:"challenge"`
-	PublicKey    string               `json:"publicKey"`
-	Solution     string               `json:"solution"`
-	Subscription webpush.Subscription `json:"subscription"`
-	Data         string               `json:"data"`
+type DataMessage struct {
+	Subscription webpush.Subscription `msgpack:"sub"`
+	Data         string               `msgpack:"data"`
+}
+
+type AuthMessage struct {
+	Time      []byte `msgpack:"t"`
+	Sig       []byte `msgpack:"sig"`
+	PublicKey []byte `msgpack:"pubKey"`
 }
 
 func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Options) {
@@ -68,124 +66,90 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 		return nil
 	})
 
-	privKey := make(chan *ecdsa.PrivateKey)
-	challengeCount := make(chan int)
-	go KeepFreshKey(privKey, challengeCount, 20)
-
 	for {
-		msgType, msgTxt, err := conn.ReadMessage()
+		authMsgType, authMsgBin, err := conn.ReadMessage()
 		if err != nil {
 			return
 		}
-		if msgType != websocket.TextMessage {
+		if authMsgType != websocket.BinaryMessage {
 			return
 		}
-		var msg ClientMessage
-		err = json.Unmarshal(msgTxt, &msg)
+		var authMsg AuthMessage
+		err = msgpack.Unmarshal(authMsgBin, &authMsg)
 		if err != nil {
+			log.Println("failed to unmarshal auth", err)
 			return
 		}
 
-		if msg.Get == "challenge" {
-			challengeCount <- 1
-			priv := <-privKey
-			challenge, err := GetChallenge(priv)
+		// verify auth msg
+		if !VerifyAuthMessage(&authMsg, id) {
+			return
+		}
+
+		// user is authed
+		user, err := o.GetUser(idEnc)
+		if err != nil {
+			log.Println("failed to find user", idEnc)
+			return
+		}
+		user.Pusher.EnsureKey()
+		r := ServerResponse{
+			Message:  "handshake done",
+			VapidKey: user.Pusher.PublicKey,
+			Data:     user.GetData(),
+		}
+		rj, _ := json.Marshal(r)
+		err = conn.WriteMessage(websocket.TextMessage, rj)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		user.RegisterWebSocket(conn)
+		user.SendStored()
+
+		// authenticated message loop
+		for {
+			msgType, msgText, err := conn.ReadMessage()
+
 			if err != nil {
-				log.Println(err)
+				conn.Close()
 				return
 			}
-			buf := new(bytes.Buffer)
-			json.NewEncoder(buf).Encode(challenge)
-			err = conn.WriteMessage(websocket.TextMessage, buf.Bytes())
+
+			if msgType != websocket.TextMessage {
+				log.Println("bad message", msgType, msgText)
+				return
+			}
+
+			var msg DataMessage
+			err = json.Unmarshal(msgText, &msg)
 			if err != nil {
+				log.Println("failed to unmarshal message", err)
 				return
 			}
-		}
 
-		if msg.Solution != "" {
-			challengeCount <- 0
-			priv := <-privKey
-			if !VerifySolution(&msg, id, &priv.PublicKey) {
-				return
-			} else {
-				user, err := o.GetUser(idEnc)
-				if err != nil {
-					log.Println("failed to find user", idEnc)
-					return
-				}
-				user.Pusher.EnsureKey()
-				r := ServerResponse{
-					Message:  "handshake done",
-					VapidKey: user.Pusher.PublicKey,
-					Data:     user.GetData(),
-				}
-				rj, _ := json.Marshal(r)
-				err = conn.WriteMessage(websocket.TextMessage, rj)
-				if err != nil {
-					log.Println(err)
-					return
-				}
-				user.RegisterWebSocket(conn)
-				user.SendStored()
-
-				// authenticated message loop
-				for {
-					msgType, msgText, err := conn.ReadMessage()
-
-					if err != nil {
-						conn.Close()
-						return
-					}
-
-					if msgType != websocket.TextMessage {
-						log.Println("bad message", msgType, msgText)
-						return
-					}
-
-					var msg ClientMessage
-					err = json.Unmarshal(msgText, &msg)
-					if err != nil {
-						log.Println("failed to unmarshal message", err)
-						return
-					}
-
-					if msg.Subscription.Endpoint != "" {
-						user.Pusher.AddSubscription(&msg.Subscription)
-					}
-
-					if msg.Get == "data" {
-						resp, _ := json.Marshal(ServerResponse{
-							Data: user.GetData(),
-						})
-						conn.WriteMessage(websocket.TextMessage, resp)
-					}
-
-					if msg.Set == "data" {
-						err := user.SetData(msg.Data, opt.DataLenMax)
-						if err != nil {
-							log.Println("failed to set data", err)
-							errResp, _ := json.Marshal(ServerResponse{
-								Error: fmt.Sprintf("%v", err),
-							})
-							conn.WriteMessage(websocket.TextMessage, errResp)
-						}
-					}
-				}
+			if msg.Subscription.Endpoint != "" {
+				user.Pusher.AddSubscription(&msg.Subscription)
 			}
-		}
-	}
-}
 
-func KeepFreshKey(privKey chan *ecdsa.PrivateKey, challengeCount chan int, limit int) {
-	count := 0
-	curKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	for {
-		count += <-challengeCount
-		if count >= limit {
-			curKey, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-			count = 0
+			/*if msg.Get == "data" {
+				resp, _ := json.Marshal(ServerResponse{
+					Data: user.GetData(),
+				})
+				conn.WriteMessage(websocket.TextMessage, resp)
+			}
+
+			if msg.Set == "data" {
+				err := user.SetData(msg.Data, opt.DataLenMax)
+				if err != nil {
+					log.Println("failed to set data", err)
+					errResp, _ := json.Marshal(ServerResponse{
+						Error: fmt.Sprintf("%v", err),
+					})
+					conn.WriteMessage(websocket.TextMessage, errResp)
+				}
+			}*/
 		}
-		privKey <- curKey
 	}
 }
 

@@ -5,6 +5,7 @@ go 1.17
 require (
 	github.com/SherClockHolmes/webpush-go v1.1.3
 	github.com/gorilla/websocket v1.4.2
+	github.com/shamaton/msgpack/v2 v2.1.0
 )
 
 require (
