@@ -61,7 +61,7 @@ func (o *Oracle) KeepClean() {
 			// has no push subscription &&
 			// has no stored data )
 			if !u.Online && (time.Now().After(u.LastConnection.Add(o.Options.UserTTL)) ||
-				len(keep) < 1 && u.Pusher.Subscription == nil && u.Data == "") {
+				len(keep) < 1 && u.Pusher.Subscription == nil && u.Data != nil) {
 				delete(o.Users, id)
 				log.Println("cleaned up", id)
 			} else {

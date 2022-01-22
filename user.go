@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -16,7 +15,7 @@ type User struct {
 	Online         bool          `json:"-"`
 	Mux            *sync.RWMutex `json:"-"`
 	Pusher         Pusher
-	Data           string
+	Data           []byte
 	LastConnection time.Time
 }
 
@@ -25,10 +24,22 @@ type Msg struct {
 	Kick time.Time // time to kick from storage
 }
 
+type MessageBody struct {
+	From []byte `msgpack:"f"`
+}
+
 type Connection struct {
 	Sock *websocket.Conn
 	Mux  *sync.Mutex
 }
+
+/*
+Type: "message"
+From: "{publicKeyHash}"
+type Notification struct {
+	Type string
+	From string
+}*/
 
 func (u *User) RegisterWebSocket(conn *websocket.Conn) {
 	c := Connection{
@@ -79,6 +90,10 @@ func (u *User) Send(msg []byte, ttl time.Duration) {
 	} else { // offline
 		// send notification
 		u.Pusher.Push(u.Id, []byte("You've got a message"))
+		/*
+			TODO: Unmarshal received msg, get 'from' id
+			& serialise rich notification
+		*/
 	}
 }
 
@@ -87,7 +102,7 @@ func (u *User) SendStored() {
 	for _, c := range u.Conns {
 		c.Mux.Lock()
 		for _, m := range u.Msgs {
-			err := c.Sock.WriteMessage(websocket.TextMessage, m.Body)
+			err := c.Sock.WriteMessage(websocket.BinaryMessage, m.Body)
 			if err != nil {
 				log.Println(c.Sock.RemoteAddr(), "failed to send stored msg", err)
 			}
@@ -97,17 +112,13 @@ func (u *User) SendStored() {
 	u.Mux.RUnlock()
 }
 
-func (u *User) SetData(data string, lenMax int) error {
-	if len(data) > lenMax {
-		return fmt.Errorf("max length of %v exceeded for data: %v", lenMax, data)
-	}
+func (u *User) SetData(data []byte) {
 	u.Mux.Lock()
 	u.Data = data
 	u.Mux.Unlock()
-	return nil
 }
 
-func (u *User) GetData() string {
+func (u *User) GetData() []byte {
 	u.Mux.RLock()
 	defer u.Mux.RUnlock()
 	return u.Data

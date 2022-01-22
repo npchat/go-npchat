@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+type AuthMessage struct {
+	Time      []byte `msgpack:"time"`
+	Sig       []byte `msgpack:"sig"`
+	PublicKey []byte `msgpack:"publicKey"`
+}
+
 func VerifyAuthMessage(msg *AuthMessage, id []byte) bool {
 	// verify Time is within 1 second
 	threshold := time.Duration(1) * time.Second
@@ -19,7 +25,6 @@ func VerifyAuthMessage(msg *AuthMessage, id []byte) bool {
 		log.Println("failed to convert time to int")
 	}
 	timeDec := time.UnixMilli(timestamp)
-
 	if timeDec.Before(time.Now()) {
 		// check if not too old
 		if timeDec.Add(threshold).Before(time.Now()) {
