@@ -9,13 +9,13 @@ import (
 )
 
 type User struct {
-	Id             string
 	Msgs           []Msg
 	Conns          []Connection  `json:"-"`
 	Online         bool          `json:"-"`
 	Mux            *sync.RWMutex `json:"-"`
 	Pusher         Pusher
 	Data           []byte
+	ShareableData  []byte
 	LastConnection time.Time
 }
 
@@ -77,7 +77,7 @@ func (u *User) Send(msg []byte, ttl time.Duration) {
 		}
 	} else { // offline
 		// send notification
-		u.Pusher.Push(u.Id, []byte("Received message"))
+		u.Pusher.Push("", []byte("Received message"))
 	}
 }
 
@@ -106,4 +106,16 @@ func (u *User) GetData() []byte {
 	u.Mux.RLock()
 	defer u.Mux.RUnlock()
 	return u.Data
+}
+
+func (u *User) SetShareableData(shareableData []byte) {
+	u.Mux.Lock()
+	u.ShareableData = shareableData
+	u.Mux.Unlock()
+}
+
+func (u *User) GetShareableData() []byte {
+	u.Mux.RLock()
+	defer u.Mux.RUnlock()
+	return u.ShareableData
 }

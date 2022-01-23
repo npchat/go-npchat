@@ -11,7 +11,7 @@ import (
 var lock sync.Mutex
 
 func Marshal(v interface{}) (io.Reader, error) {
-	b, err := json.Marshal(v)
+	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return nil, err
 	}

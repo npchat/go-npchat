@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"log"
 	"sync"
@@ -25,11 +25,8 @@ func (o *Oracle) GetUser(id string) (*User, error) {
 		return u, nil
 	} else {
 		// validate id
-		idBytes, err := base64.RawURLEncoding.DecodeString(id)
-		if err != nil {
-			return nil, err
-		}
-		if len(idBytes) != 32 {
+		idBytes, err := hex.DecodeString(id)
+		if err != nil || len(idBytes) != 32 {
 			return nil, errors.New("invalid id")
 		}
 		// make one
@@ -59,9 +56,10 @@ func (o *Oracle) KeepClean() {
 			// last connection older than UserTTL ||
 			// has no messages &&
 			// has no push subscription &&
-			// has no stored data )
+			// has no stored data &&
+			// has no shareable data )
 			if !u.Online && (time.Now().After(u.LastConnection.Add(o.Options.UserTTL)) ||
-				len(keep) < 1 && u.Pusher.Subscription == nil && u.Data != nil) {
+				len(keep) < 1 && u.Pusher.Subscription == nil && u.Data == nil && u.ShareableData == nil) {
 				delete(o.Users, id)
 				log.Println("cleaned up", id)
 			} else {

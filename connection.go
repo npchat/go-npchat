@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -22,17 +22,14 @@ type Response struct {
 type Message struct {
 	PushSubscription string `msgpack:"sub"`
 	Data             []byte `msgpack:"data"`
+	ShareableData    []byte `msgpack:"shareableData"`
 }
 
 func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Options) {
 	idEnc := GetIdFromPath(r.URL.Path)
 
-	id, err := base64.RawURLEncoding.DecodeString(idEnc)
-	if err != nil {
-		return
-	}
-
-	if len(id) != 32 {
+	id, err := hex.DecodeString(idEnc)
+	if err != nil || len(id) != 32 {
 		http.Error(w, fmt.Sprintf("invalid id %v", idEnc), http.StatusBadRequest)
 		return
 	}
@@ -147,6 +144,10 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 
 			if msg.Data != nil && len(msg.Data) <= opt.DataLenMax {
 				user.SetData(msg.Data)
+			}
+
+			if msg.ShareableData != nil && len(msg.ShareableData) <= opt.DataLenMax {
+				user.SetShareableData(msg.ShareableData)
 			}
 		}
 	}

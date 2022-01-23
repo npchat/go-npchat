@@ -15,7 +15,6 @@ func HandlePost(w http.ResponseWriter, r *http.Request, o *Oracle) {
 	id := GetIdFromPath(r.URL.Path)
 	user, err := o.GetUser(id)
 	if err != nil {
-		http.Error(w, "failed to get user", http.StatusBadRequest)
 		return
 	}
 	user.Send(body, o.Options.MsgTTL)

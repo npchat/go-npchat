@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -41,7 +40,11 @@ func main() {
 			return
 		}
 		if r.URL.Path == "/info" {
-			handleInfo(w, &startTime, &opt)
+			handleGetInfo(w, &startTime, &opt)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/shareable") {
+			HandleGetShareable(w, r, &oracle)
 			return
 		}
 		HandleConnection(w, r, &oracle, &opt)
@@ -63,18 +66,9 @@ func main() {
 	}
 }
 
-func handleInfo(w http.ResponseWriter, startTime *time.Time, opt *Options) {
-	w.Header().Add("Content-Type", "application/json")
-	info, _ := json.MarshalIndent(Info{
-		Status:     "healthy",
-		StartTime:  *startTime,
-		DataLenMax: opt.DataLenMax,
-		MsgTTL:     int(opt.MsgTTL.Seconds()),
-		UserTTL:    int(opt.UserTTL.Seconds()),
-	}, "", "\t")
-	w.Write(info)
-}
-
 func GetIdFromPath(path string) string {
-	return strings.TrimLeft(path, "/")
+	// remove beginning "/"
+	cleaned := strings.TrimLeft(path, "/")
+	// return first segment of path
+	return strings.Split(cleaned, "/")[0]
 }
