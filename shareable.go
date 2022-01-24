@@ -20,5 +20,6 @@ func HandleGetShareable(w http.ResponseWriter, r *http.Request, o *Oracle) {
 		return
 	}
 
-	w.Write([]byte(user.GetShareableData()))
+	w.Header().Add("Content-Type", "application/json")
+	w.Write(user.GetShareableData())
 }
