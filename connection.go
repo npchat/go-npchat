@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -28,7 +28,7 @@ type Message struct {
 func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Options) {
 	idEnc := GetIdFromPath(r.URL.Path)
 
-	id, err := hex.DecodeString(idEnc)
+	id, err := base64.RawURLEncoding.DecodeString(idEnc)
 	if err != nil || len(id) != 32 {
 		http.Error(w, fmt.Sprintf("invalid id %v", idEnc), http.StatusBadRequest)
 		return

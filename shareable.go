@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/hex"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 )
@@ -9,7 +9,7 @@ import (
 func HandleGetShareable(w http.ResponseWriter, r *http.Request, o *Oracle) {
 	idEnc := GetIdFromPath(r.URL.Path)
 
-	id, err := hex.DecodeString(idEnc)
+	id, err := base64.RawURLEncoding.DecodeString(idEnc)
 	if err != nil || len(id) != 32 {
 		http.Error(w, fmt.Sprintf("invalid id %v", idEnc), http.StatusBadRequest)
 		return

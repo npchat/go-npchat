@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"log"
 	"sync"
@@ -25,7 +25,7 @@ func (o *Oracle) GetUser(id string) (*User, error) {
 		return u, nil
 	} else {
 		// validate id
-		idBytes, err := hex.DecodeString(id)
+		idBytes, err := base64.RawURLEncoding.DecodeString(id)
 		if err != nil || len(idBytes) != 32 {
 			return nil, errors.New("invalid id")
 		}

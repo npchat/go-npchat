@@ -72,7 +72,10 @@ func (u *User) Send(msg []byte, ttl time.Duration) {
 			err := c.Sock.WriteMessage(websocket.BinaryMessage, msg)
 			c.Mux.Unlock()
 			if err != nil {
-				log.Println(c.Sock.RemoteAddr(), "failed to send msg", err)
+				u.Mux.Lock()
+				u.UnregisterWebSocket(c.Sock)
+				u.Mux.Unlock()
+				log.Println("failed to send msg, cleaned up socket", err)
 			}
 		}
 	} else { // offline
