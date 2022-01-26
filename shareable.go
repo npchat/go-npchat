@@ -15,8 +15,9 @@ func HandleGetShareable(w http.ResponseWriter, r *http.Request, o *Oracle) {
 		return
 	}
 
-	user, err := o.GetUser(idEnc)
+	user, err := o.GetUser(idEnc, false)
 	if err != nil {
+		http.Error(w, fmt.Sprintf("did not find %v", idEnc), http.StatusNotFound)
 		return
 	}
 

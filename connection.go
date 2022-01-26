@@ -48,9 +48,9 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 	defer conn.Close()
 
 	conn.SetCloseHandler(func(_ int, _ string) error {
-		user, err := o.GetUser(idEnc)
+		user, err := o.GetUser(idEnc, false)
 		if err != nil {
-			log.Println("failed to find user", idEnc)
+			log.Println(err, idEnc)
 			return err
 		}
 		user.UnregisterWebSocket(conn)
@@ -89,9 +89,9 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 			return
 		}
 
-		user, err := o.GetUser(idEnc)
+		user, err := o.GetUser(idEnc, true)
 		if err != nil {
-			log.Println("failed to find user", idEnc)
+			log.Println("failed to get user for auth", err)
 			return
 		}
 

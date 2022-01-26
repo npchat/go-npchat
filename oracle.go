@@ -14,7 +14,7 @@ type Oracle struct {
 	Options *Options      `json:"-"`
 }
 
-func (o *Oracle) GetUser(id string) (*User, error) {
+func (o *Oracle) GetUser(id string, makeIfNotFound bool) (*User, error) {
 	o.Mux.RLock()
 	u := o.Users[id]
 	o.Mux.RUnlock()
@@ -23,7 +23,7 @@ func (o *Oracle) GetUser(id string) (*User, error) {
 			u.Mux = new(sync.RWMutex)
 		}
 		return u, nil
-	} else {
+	} else if makeIfNotFound {
 		// validate id
 		idBytes, err := base64.RawURLEncoding.DecodeString(id)
 		if err != nil || len(idBytes) != 32 {
@@ -39,6 +39,7 @@ func (o *Oracle) GetUser(id string) (*User, error) {
 		defer o.Mux.Unlock()
 		return o.Users[id], nil
 	}
+	return nil, errors.New("no user found")
 }
 
 func (o *Oracle) KeepClean() {
