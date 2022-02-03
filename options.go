@@ -9,16 +9,16 @@ import (
 
 const PREFIX = "NPCHAT_"
 const PORT = 8000
-const MSG_TTL = 60               // second
-const USER_TTL = 7776000         // second (90 days)
-const CLEAN_PERIOD = MSG_TTL / 2 // second
-const DATA_LEN_MAX = 2048        // 2MB
+const MSG_TTL = 432000    // second
+const USER_TTL = 7776000  // second (90 days)
+const CLEAN_PERIOD = 300  // second
+const DATA_LEN_MAX = 2048 // 2MB
 const PERSIST_FILE = "./persist.json"
 
 type Options struct {
 	Port        int
 	CertFile    string
-	PrivKeyFile string
+	KeyFile     string
 	MsgTTL      time.Duration
 	UserTTL     time.Duration
 	CleanPeriod time.Duration
@@ -28,7 +28,7 @@ type Options struct {
 
 func LoadOptions() Options {
 	envCert := os.Getenv(PREFIX + "CERT")
-	envPrivKey := os.Getenv(PREFIX + "PRIVKEY")
+	envKey := os.Getenv(PREFIX + "KEY")
 
 	defaultPersist, envPersistIsSet := os.LookupEnv(PREFIX + "PERSIST")
 	if !envPersistIsSet {
@@ -67,7 +67,7 @@ func LoadOptions() Options {
 
 	o := Options{}
 	flag.StringVar(&o.CertFile, "cert", envCert, "must be a file path")
-	flag.StringVar(&o.PrivKeyFile, "privkey", envPrivKey, "must be a file path")
+	flag.StringVar(&o.KeyFile, "key", envKey, "must be a file path")
 	flag.StringVar(&o.PersistFile, "persist", defaultPersist, "must be a file path")
 	flag.IntVar(&o.Port, "port", defaultPort, "must be an int")
 	flag.IntVar(&o.DataLenMax, "datalenmax", defaultDataLenMax, "must be an int")

@@ -57,15 +57,18 @@ func (u *User) UnregisterWebSocket(conn *websocket.Conn) {
 	u.Mux.Unlock()
 }
 
-func (u *User) Send(msg []byte, ttl time.Duration) {
-	// store it
-	m := Msg{
-		Body: msg,
-		Kick: time.Now().Add(ttl),
+func (u *User) Send(msg []byte, ttl time.Duration, doStore bool) {
+	if doStore {
+		// store it
+		m := Msg{
+			Body: msg,
+			Kick: time.Now().Add(ttl),
+		}
+		u.Mux.Lock()
+		u.Msgs = append(u.Msgs, m)
+		u.Mux.Unlock()
 	}
-	u.Mux.Lock()
-	u.Msgs = append(u.Msgs, m)
-	u.Mux.Unlock()
+
 	if u.Online {
 		for _, c := range u.Conns {
 			c.Mux.Lock()
@@ -77,8 +80,11 @@ func (u *User) Send(msg []byte, ttl time.Duration) {
 			}
 		}
 	} else { // offline
-		// send notification
-		u.Pusher.Push("", []byte("Received message"))
+		if doStore {
+			// send notification
+			u.Pusher.Push("", []byte("Received message"))
+		}
+		// else message disappears silently
 	}
 }
 

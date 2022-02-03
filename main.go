@@ -51,18 +51,16 @@ func main() {
 	})
 
 	addr := fmt.Sprintf(":%v", opt.Port)
-	if opt.CertFile != "" && opt.PrivKeyFile != "" {
-		log.Printf("listening on %v, serving with TLS\n", addr)
-		err := http.ListenAndServeTLS(addr, opt.CertFile, opt.PrivKeyFile, nil)
-		if err != nil {
-			log.Println("failed to start HTTPS server", err)
-		}
+	log.Printf("listening on %v\n", addr)
+	var err error
+	if opt.CertFile != "" && opt.KeyFile != "" {
+		log.Println("expecting HTTPS connections")
+		err = http.ListenAndServeTLS(addr, opt.CertFile, opt.KeyFile, nil)
 	} else {
-		log.Printf("listening on %v\n", addr)
-		err := http.ListenAndServe(addr, nil)
-		if err != nil {
-			log.Println("failed to start HTTP server", err)
-		}
+		err = http.ListenAndServe(addr, nil)
+	}
+	if err != nil {
+		log.Println("failed to start server", err)
 	}
 }
 

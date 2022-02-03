@@ -30,26 +30,28 @@ Configure the chat server using either environment variables or arguments.
 - Port `default 8000`
 - Cert `default ""`
 - PrivKey `default ""`
-- MessageTTL `default 60 seconds`
-- CleanPeriod `default 30 seconds`
-- FreshKey `default 100` generate a new key after number of challenges
+- MessageTTL `default 43200 seconds`
+- UserTTL `default 7776000 seconds`
+- CleanPeriod `default 300 seconds`
+- DataLenMax `default 2048`
+- PersistFile `default ./persist.json`
 
-If no Cert & PrivKey is provided, the HTTP server will start without TLS.
+If no SSL Cert & Key is provided, the HTTP server will start without TLS.
 
 ### Environment variables
 ```zsh
 export NPCHAT_PORT=8000
 export NPCHAT_CERT=""
-export NPCHAT_PRIVKEY=""
-export NPCHAT_MSG_TTL=60
-export NPCHAT_CLEAN_PERIOD=30
-export NPCHAT_FRESHKEY=100
+export NPCHAT_KEY=""
+export NPCHAT_MSG_TTL=43200
+export NPCHAT_CLEAN_PERIOD=43200
 ```
 ### Arguments
 ```zsh
 % ./go-npchat --port=443 \
-  --cert="cert.pem" --privkey="privkey.pem" \
-  --msgttl=240 --cleanperiod=120 --freshkey=100
+  --cert="cert.pem" --key="key.pem" \
+  --msgttl=43200 --userttl=43200
+  --cleanperiod=300
 ```
 
 ## Transport
@@ -91,38 +93,3 @@ A Client connects to the chat server & recieves messages as follows:
 7. Server forwards any message recieved immediately, without storing
 
 If a Client connection ends, their session is unregistered and messages will be stored until either they are delivered, or they expire and are deleted.
-
-## Reliability
-By removing the fundamental requirement that a chat server must store messages until collected (indefinitely), we can build a very simple solution that must not ensure that messages are guaranteed to persist. This greatly lowers the resource requirements of the chat server. 
-
-So, if the chat server cannot guarantee that it will deliver messages to an offline recipient (due to storage expiry), how can we guarantee that all messages will be delivered at some point?
-
-The solution is actually not part of the chat server, it's part of the client. If each message contains the hash of the preious message (recieved or sent), both end parties can detect a missing message. If a missing message is detect 
-
-## Security
-### Authentication
-With this mechanism, security depends on privacy of the Server's auth private key & privacy of the Client's auth private key. A client is obviously responsible for secure storage of it's keys.
-
-Every challenge contains the signature for the random bytes. An attacker can request as many challenges as they want...
-
-So how do we prevent the private key being deduced by requesting enough signed challenges? This is a fundamental vulnerability if not handled carefully.
-
-Adding a timestamp or TTL to the signed challenge would ensure that challenges do not remain valid indefinitely, but it does not prevent forged authorization when the private key is deduced by collecting enough challenges.
-
-My answer to this question is extremly simple. After `x` challenges are served, generate a fresh key pair. If `x` is low enough that an attacker cannot get enough challenges to deduce the private key, his efforts are futile. This solution does not require any refresh period to be specified, and does not alter in behaviour with increased traffic. The default configuration is `x=100`. As generating keys incurs some computational cost, an ideal value depends on available resources & expected traffic.
-
-After load-testing with 100s of clients concurrently connecting & each sending 1000s of messages, I have seen an issue with authentication. If keys are refreshed in the time between issuing a challenge and recieving a response, the authentication will fail because the Server's key has changed. The simplest solution would be for the client to retry, because in reality this happens rarely, and at most `1:x` times.
-
-If the assumptions based on a little knowledge of cryptography & bit of research is correct, then the following claims would be true:
-- Messages cannot be forged or modified
-- Messages can only be collected by the holder of the private key corresponding to a given public key
-
-### Privacy
-Out of the box, this chat server should provide secure & authenticated transport for messages.
-
-In reality, that has nothing to do with the content that is being transmitted. As such, complete decoupling here is the most secure & separated approach. Hence, encryption of messages is handled completely & only by the client.
-
-This ensures that clients are flexible in what they send, and also flexible in how they send it. Currently the only constraint is that messages are `text/plain` content, normally stringified JSON. A goal is to remove this constraint to allow clients to do things like negotiate WebRTC connections more easily.
-
-#### How the webclient does it
-The npchat webclient implements ECDH P-256 to derive a shared secret from the ECDH public keys, and AES-GCM to encrypt messages with the shared secret. A more complete key derivation step is necessary here, HKDF would be good.

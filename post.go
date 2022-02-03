@@ -18,5 +18,9 @@ func HandlePost(w http.ResponseWriter, r *http.Request, o *Oracle) {
 		http.Error(w, "failed to get user", http.StatusInternalServerError)
 		return
 	}
-	user.Send(body, o.Options.MsgTTL)
+
+	queryValues := r.URL.Query()
+	doStore := queryValues.Get("store") != "false"
+
+	user.Send(body, o.Options.MsgTTL, doStore)
 }
