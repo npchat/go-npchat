@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/shamaton/msgpack/v2"
 )
 
 type User struct {
@@ -27,6 +30,15 @@ type Msg struct {
 type Connection struct {
 	Sock *websocket.Conn
 	Mux  *sync.Mutex
+}
+
+type MsgData struct {
+	From []byte `msgpack:"f"`
+}
+
+type MsgPushNotification struct {
+	Type string `json:"type"`
+	From string `json:"from"`
 }
 
 func (u *User) RegisterWebSocket(conn *websocket.Conn) {
@@ -82,7 +94,19 @@ func (u *User) Send(msg []byte, ttl time.Duration, doStore bool) {
 	} else { // offline
 		if doStore {
 			// send notification
-			u.Pusher.Push("", []byte("Received message"))
+			// unmarshal message to get sender
+			msgData := MsgData{}
+			err := msgpack.Unmarshal(msg, &msgData)
+			if err != nil {
+				log.Println("failed to unmarshal message")
+				u.Pusher.Push("", []byte("Received message"))
+			} else {
+				marshalled, _ := json.Marshal(MsgPushNotification{
+					Type: "message",
+					From: base64.RawURLEncoding.EncodeToString(msgData.From),
+				})
+				u.Pusher.Push("", marshalled)
+			}
 		}
 		// else message disappears silently
 	}
