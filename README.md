@@ -26,32 +26,30 @@ Or from source
 ```
 
 ## Configuration
-Configure the chat server using either environment variables or arguments.
-- Port `default 8000`
-- Cert `default ""`
-- PrivKey `default ""`
-- MessageTTL `default 43200 seconds`
-- UserTTL `default 7776000 seconds`
-- CleanPeriod `default 300 seconds`
-- DataLenMax `default 2048`
-- PersistFile `default ./persist.json`
+Either give go-npchat a `.json` configuration file, or let it run with defaults. If any fields are ommited from the config, the default is used.
 
-If no SSL Cert & Key is provided, the HTTP server will start without TLS.
-
-### Environment variables
+### Env
 ```zsh
-export NPCHAT_PORT=8000
-export NPCHAT_CERT=""
-export NPCHAT_KEY=""
-export NPCHAT_MSG_TTL=43200
-export NPCHAT_CLEAN_PERIOD=43200
+export NPCHAT_CONFIG="config.json"
 ```
-### Arguments
+### Arg
 ```zsh
-% ./go-npchat --port=443 \
-  --cert="cert.pem" --key="key.pem" \
-  --msgttl=43200 --userttl=43200
-  --cleanperiod=300
+% ./go-npchat --config "config.json"
+```
+
+### Fields
+See below the fields & their default values.
+```json
+{
+  "Port": 8000,
+  "CertFile": "",
+  "KeyFile": "",
+  "MsgTtl": "120h",
+  "UserTtl": "2160h",
+  "CleanPeriod": "5m",
+  "DataLenMax": 2048,
+  "PersistFile": ""
+}
 ```
 
 ## To do

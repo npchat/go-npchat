@@ -16,3 +16,4 @@
 *.pem
 go-npchat
 persist.json
+config.json

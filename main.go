@@ -20,13 +20,16 @@ type Info struct {
 func main() {
 	startTime := time.Now()
 
-	opt := LoadOptions()
-	log.Printf("%+v'\n", opt)
+	cfg, err := LoadConfig()
+	if err != nil {
+		log.Fatal("failed to load config", err)
+	}
+	log.Printf("%+v'\n", cfg)
 
 	oracle := Oracle{
-		Users:   make(map[string]*User),
-		Mux:     new(sync.RWMutex),
-		Options: &opt,
+		Users:  make(map[string]*User),
+		Mux:    new(sync.RWMutex),
+		Config: &cfg,
 	}
 
 	oracle.ReadState()
@@ -40,22 +43,21 @@ func main() {
 			return
 		}
 		if r.URL.Path == "/info" {
-			handleGetInfo(w, &startTime, &opt)
+			handleGetInfo(w, &startTime, &cfg)
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/shareable") {
 			HandleGetShareable(w, r, &oracle)
 			return
 		}
-		HandleConnection(w, r, &oracle, &opt)
+		HandleConnection(w, r, &oracle, &cfg)
 	})
 
-	addr := fmt.Sprintf(":%v", opt.Port)
+	addr := fmt.Sprintf(":%v", cfg.Port)
 	log.Printf("listening on %v\n", addr)
-	var err error
-	if opt.CertFile != "" && opt.KeyFile != "" {
+	if cfg.CertFile != "" && cfg.KeyFile != "" {
 		log.Println("expecting HTTPS connections")
-		err = http.ListenAndServeTLS(addr, opt.CertFile, opt.KeyFile, nil)
+		err = http.ListenAndServeTLS(addr, cfg.CertFile, cfg.KeyFile, nil)
 	} else {
 		err = http.ListenAndServe(addr, nil)
 	}

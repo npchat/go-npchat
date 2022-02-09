@@ -22,5 +22,5 @@ func HandlePost(w http.ResponseWriter, r *http.Request, o *Oracle) {
 	queryValues := r.URL.Query()
 	doStore := queryValues.Get("store") != "false"
 
-	user.Send(body, o.Options.MsgTTL, doStore)
+	user.Send(body, o.Config.MsgTTL.Duration, doStore)
 }

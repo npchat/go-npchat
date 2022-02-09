@@ -9,9 +9,9 @@ import (
 )
 
 type Oracle struct {
-	Users   map[string]*User
-	Mux     *sync.RWMutex `json:"-"`
-	Options *Options      `json:"-"`
+	Users  map[string]*User
+	Mux    *sync.RWMutex `json:"-"`
+	Config *Config       `json:"-"`
 }
 
 func (o *Oracle) GetUser(id string, makeIfNotFound bool) (*User, error) {
@@ -59,7 +59,7 @@ func (o *Oracle) KeepClean() {
 			// has no push subscription &&
 			// has no stored data &&
 			// has no shareable data )
-			if !u.Online && (time.Now().After(u.LastConnection.Add(o.Options.UserTTL)) ||
+			if !u.Online && (time.Now().After(u.LastConnection.Add(o.Config.UserTTL.Duration)) ||
 				len(keep) < 1 && u.Pusher.Subscription == nil && u.Data == nil && u.ShareableData == nil) {
 				delete(o.Users, id)
 				log.Println("cleaned up", id)
@@ -72,20 +72,20 @@ func (o *Oracle) KeepClean() {
 			log.Println("failed to write state", err)
 		}
 		o.Mux.Unlock()
-		time.Sleep(o.Options.CleanPeriod)
+		time.Sleep(o.Config.CleanPeriod.Duration)
 	}
 }
 
 func (o *Oracle) WriteState() error {
-	if o.Options.PersistFile != "" {
-		return Write(o.Options.PersistFile, o)
+	if o.Config.PersistFile != "" {
+		return Write(o.Config.PersistFile, o)
 	}
 	return nil
 }
 
 func (o *Oracle) ReadState() error {
-	if o.Options.PersistFile != "" {
-		return Read(o.Options.PersistFile, o)
+	if o.Config.PersistFile != "" {
+		return Read(o.Config.PersistFile, o)
 	}
 	return nil
 }

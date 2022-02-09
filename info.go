@@ -6,14 +6,14 @@ import (
 	"time"
 )
 
-func handleGetInfo(w http.ResponseWriter, startTime *time.Time, opt *Options) {
+func handleGetInfo(w http.ResponseWriter, startTime *time.Time, cfg *Config) {
 	w.Header().Add("Content-Type", "application/json")
 	info, _ := json.MarshalIndent(Info{
 		Status:     "healthy",
 		StartTime:  *startTime,
-		DataLenMax: opt.DataLenMax,
-		MsgTTL:     int(opt.MsgTTL.Seconds()),
-		UserTTL:    int(opt.UserTTL.Seconds()),
+		DataLenMax: cfg.DataLenMax,
+		MsgTTL:     int(cfg.MsgTTL.Seconds()),
+		UserTTL:    int(cfg.UserTTL.Seconds()),
 	}, "", "\t")
 	w.Write(info)
 }

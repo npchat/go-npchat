@@ -25,7 +25,7 @@ type Message struct {
 	ShareableData    []byte `msgpack:"shareableData"`
 }
 
-func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Options) {
+func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, cfg *Config) {
 	idEnc := GetIdFromPath(r.URL.Path)
 
 	id, err := base64.RawURLEncoding.DecodeString(idEnc)
@@ -142,11 +142,11 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, opt *Op
 				user.Pusher.AddSubscription(&sub)
 			}
 
-			if msg.Data != nil && len(msg.Data) <= opt.DataLenMax {
+			if msg.Data != nil && len(msg.Data) <= cfg.DataLenMax {
 				user.SetData(msg.Data)
 			}
 
-			if msg.ShareableData != nil && len(msg.ShareableData) <= opt.DataLenMax {
+			if msg.ShareableData != nil && len(msg.ShareableData) <= cfg.DataLenMax {
 				user.SetShareableData(msg.ShareableData)
 			}
 		}
