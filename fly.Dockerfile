@@ -48,9 +48,11 @@ COPY --from=builder /etc/group /etc/group
 # Copy our static executable
 COPY --from=builder /go/bin/npchat /go/bin/npchat
 
+COPY ./fly.config.json /etc/npchat/fly.config.json
+
 # Use an unprivileged user
 #USER appuser:appuser
 
-EXPOSE 8000
+EXPOSE 8080
 
-ENTRYPOINT ["/go/bin/npchat"]
+ENTRYPOINT ["/go/bin/npchat", "--config=/etc/npchat/fly.config.json"]

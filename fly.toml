@@ -1,13 +1,10 @@
-# fly.toml file generated for wispy-feather-9047 on 2022-01-16T16:19:53+01:00
-
 app = "wispy-feather-9047"
 
+[build]
+dockerfile = "fly.Dockerfile"
+
 [env]
-  NPCHAT_PORT = 8080
-  NPCHAT_PERSIST = "" # no volume, no persistence
-  NPCHAT_MSG_TTL = 432000 # 5 days
-  NPCHAT_USER_TTL = 2592000 # 30 days
-  NPCHAT_CLEAN_PERIOD = 300 # 5 minutes
+  PORT = "8080"
 
 [[services]]
   internal_port = 8080
