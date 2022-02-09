@@ -50,6 +50,14 @@ func main() {
 			HandleGetShareable(w, r, &oracle)
 			return
 		}
+		if strings.HasSuffix(r.URL.Path, "/turn") {
+			if r.Method == "OPTIONS" {
+				w.Header().Add("Access-Control-Allow-Headers", "Authorization")
+				return
+			}
+			HandleGetTurnServers(w, r, &cfg)
+			return
+		}
 		HandleConnection(w, r, &oracle, &cfg)
 	})
 

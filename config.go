@@ -25,6 +25,7 @@ type Config struct {
 	CleanPeriod Duration
 	DataLenMax  int
 	PersistFile string
+	Turn        TurnConfig
 }
 
 // Correctly unmarshal duration in config file
