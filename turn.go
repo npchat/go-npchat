@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/hmac"
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -48,6 +49,16 @@ func getAuthMsgFromRequest(r *http.Request) (AuthMessage, error) {
 	return authMsg, nil
 }
 
+func makeCredential(username string, secret string) string {
+	secH := md5.New()
+	secH.Write([]byte(secret))
+	sec := secH.Sum(nil)
+
+	credH := hmac.New(sha256.New, sec)
+	credH.Write([]byte(username))
+	return base64.StdEncoding.EncodeToString(credH.Sum(nil))
+}
+
 func HandleGetTurnServers(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	idEncoded := GetIdFromPath(r.URL.Path)
 	id, err := base64.RawURLEncoding.DecodeString(idEncoded)
@@ -56,7 +67,6 @@ func HandleGetTurnServers(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	// authenticate request
 	authMsg, err := getAuthMsgFromRequest(r)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -74,19 +84,14 @@ func HandleGetTurnServers(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		timestamp := strconv.FormatInt(ttl.UnixMilli(), 10)
 		username := timestamp + ":" + idEncoded
 
-		// MAYBE hash secret using MD5... read Coturn docs
-		h := hmac.New(sha256.New, []byte(serverCfg.Secret))
-		h.Write([]byte(username))
-		credential := base64.StdEncoding.EncodeToString(h.Sum(nil))
-
 		turnServers[i] = TurnServerResponse{
 			URL:        serverCfg.URL,
 			Username:   username,
-			Credential: credential,
+			Credential: makeCredential(username, serverCfg.Secret),
 		}
 	}
 
-	resp, _ := json.MarshalIndent(turnServers, "", "  ")
+	resp, _ := json.Marshal(turnServers)
 	w.Write(resp)
 	w.Header().Add("Content-Type", "application/json")
 }
