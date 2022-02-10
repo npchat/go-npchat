@@ -9,20 +9,12 @@ The result is a binary or tiny container (< 10MB) that can be deployed anywhere,
 ## Usage
 ### With Docker
 ```zsh
-% make build
-```
-Then
-```zsh
-% docker run go-npchat
+% docker run -d -p 8000:8000 -v /path/to/your/config:/etc/npchat \ druseless/go-npchat -c /etc/npchat/config.json
 ```
 ### With Go
 Build a binary
 ```zsh
 % go build
-```
-Or from source
-```zsh
-% go run .
 ```
 
 ## Configuration
@@ -30,11 +22,11 @@ Either give go-npchat a `.json` configuration file, or let it run with defaults.
 
 ### Env
 ```zsh
-export NPCHAT_CONFIG="config.json"
+% export NPCHAT_CONFIG="config.json"
 ```
 ### Arg
 ```zsh
-% ./go-npchat --config "config.json"
+% ./go-npchat -c "config.json"
 ```
 
 ### Fields

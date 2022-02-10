@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"log"
 	"os"
 	"time"
 )
@@ -58,7 +59,7 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 func LoadConfig() (Config, error) {
 	envConfigFile := os.Getenv(envPrefix + "CONFIG")
 	configFile := ""
-	flag.StringVar(&configFile, "config", envConfigFile, "must be a file path")
+	flag.StringVar(&configFile, "c", envConfigFile, "must be a file path")
 	flag.Parse()
 	cfg := Config{
 		Port:        defaultPort,
@@ -68,6 +69,7 @@ func LoadConfig() (Config, error) {
 		DataLenMax:  defaultDataLenMax,
 	}
 	if configFile == "" {
+		log.Println("no config file defined, running with defaults")
 		return cfg, nil
 	} else {
 		err := read(configFile, &cfg)
