@@ -2,29 +2,24 @@ package main
 
 import (
 	"crypto/hmac"
-	"crypto/md5"
-	"crypto/sha256"
+	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/shamaton/msgpack/v2"
 )
 
 type TurnConfig struct {
-	Servers []TurnServerCfg
-}
-
-type TurnServerCfg struct {
 	URL            string
 	Secret         string
 	CredentialsTtl Duration
 }
 
-type TurnServerResponse struct {
+type TurnInfo struct {
 	URL        string `json:"urls"`
 	Username   string `json:"username"`
 	Credential string `json:"credential"`
@@ -40,26 +35,35 @@ func getAuthMsgFromRequest(r *http.Request) (AuthMessage, error) {
 	if err != nil {
 		return authMsg, err
 	}
-
 	err = msgpack.Unmarshal(authHeaderDecoded, &authMsg)
 	if err != nil {
 		return authMsg, err
 	}
-
 	return authMsg, nil
 }
 
 func makeCredential(username string, secret string) string {
-	secH := md5.New()
-	secH.Write([]byte(secret))
-	sec := secH.Sum(nil)
-
-	credH := hmac.New(sha256.New, sec)
+	/*
+		secH := md5.New()
+		secH.Write([]byte(secret))
+		sec := secH.Sum(nil)
+	*/
+	credH := hmac.New(sha1.New, []byte(secret))
 	credH.Write([]byte(username))
 	return base64.StdEncoding.EncodeToString(credH.Sum(nil))
 }
 
-func HandleGetTurnServers(w http.ResponseWriter, r *http.Request, cfg *Config) {
+func getTurnInfo(idEncoded string, cfg *TurnConfig) TurnInfo {
+	expiry := time.Now().Add(cfg.CredentialsTtl.Duration)
+	username := fmt.Sprintf("%d:%s", expiry.Unix(), idEncoded)
+	return TurnInfo{
+		URL:        cfg.URL,
+		Username:   username,
+		Credential: makeCredential(username, cfg.Secret),
+	}
+}
+
+func HandleGetTurnInfo(w http.ResponseWriter, r *http.Request, cfg *TurnConfig) {
 	idEncoded := GetIdFromPath(r.URL.Path)
 	id, err := base64.RawURLEncoding.DecodeString(idEncoded)
 	if err != nil {
@@ -78,20 +82,8 @@ func HandleGetTurnServers(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	turnServers := make([]TurnServerResponse, len(cfg.Turn.Servers))
-	for i, serverCfg := range cfg.Turn.Servers {
-		ttl := time.Now().Add(serverCfg.CredentialsTtl.Duration)
-		timestamp := strconv.FormatInt(ttl.UnixMilli(), 10)
-		username := timestamp + ":" + idEncoded
-
-		turnServers[i] = TurnServerResponse{
-			URL:        serverCfg.URL,
-			Username:   username,
-			Credential: makeCredential(username, serverCfg.Secret),
-		}
-	}
-
-	resp, _ := json.Marshal(turnServers)
+	turnInfo := getTurnInfo(idEncoded, cfg)
+	resp, _ := json.Marshal(turnInfo)
 	w.Write(resp)
 	w.Header().Add("Content-Type", "application/json")
 }

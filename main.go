@@ -55,7 +55,7 @@ func main() {
 				w.Header().Add("Access-Control-Allow-Headers", "Authorization")
 				return
 			}
-			HandleGetTurnServers(w, r, &cfg)
+			HandleGetTurnInfo(w, r, &cfg.Turn)
 			return
 		}
 		HandleConnection(w, r, &oracle, &cfg)

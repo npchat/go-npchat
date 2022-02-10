@@ -46,21 +46,21 @@ func VerifyAuthMessage(msg *AuthMessage, id []byte) bool {
 		return false
 	}
 
-	// unmarshal client public key
+	// deserialise public key
 	pubKey := ecdsa.PublicKey{
 		Curve: elliptic.P256(),
 		X:     new(big.Int).SetBytes(msg.PublicKey[1:33]),
-		Y:     new(big.Int).SetBytes(msg.PublicKey[33:])}
+		Y:     new(big.Int).SetBytes(msg.PublicKey[33:]),
+	}
 
 	// hash Time with SHA-256
 	tH := sha256.New()
 	tH.Write(msg.Time)
 	tHash := tH.Sum(nil)
 
-	// verify client signature
+	// verify signature
 	cL := len(msg.Sig) / 2
 	cSigR := new(big.Int).SetBytes(msg.Sig[:cL])
 	cSigS := new(big.Int).SetBytes(msg.Sig[cL:])
-
 	return ecdsa.Verify(&pubKey, tHash, cSigR, cSigS)
 }
