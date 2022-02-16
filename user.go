@@ -25,11 +25,6 @@ type Connection struct {
 	mux  *sync.Mutex
 }
 
-type Msg struct {
-	body []byte    // content
-	kick time.Time // time to kick from storage
-}
-
 type MsgData struct {
 	From []byte `msgpack:"f"`
 }
