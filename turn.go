@@ -5,12 +5,9 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
-
-	"github.com/shamaton/msgpack/v2"
 )
 
 type TurnConfig struct {
@@ -25,29 +22,7 @@ type TurnInfo struct {
 	Credential string `json:"credential"`
 }
 
-func getAuthMsgFromRequest(r *http.Request) (AuthMessage, error) {
-	authMsg := AuthMessage{}
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return authMsg, errors.New("missing authorization header")
-	}
-	authHeaderDecoded, err := base64.RawURLEncoding.DecodeString(authHeader)
-	if err != nil {
-		return authMsg, err
-	}
-	err = msgpack.Unmarshal(authHeaderDecoded, &authMsg)
-	if err != nil {
-		return authMsg, err
-	}
-	return authMsg, nil
-}
-
 func makeCredential(username string, secret string) string {
-	/*
-		secH := md5.New()
-		secH.Write([]byte(secret))
-		sec := secH.Sum(nil)
-	*/
 	credH := hmac.New(sha1.New, []byte(secret))
 	credH.Write([]byte(username))
 	return base64.StdEncoding.EncodeToString(credH.Sum(nil))
@@ -63,8 +38,8 @@ func getTurnInfo(idEncoded string, cfg *TurnConfig) TurnInfo {
 	}
 }
 
-func HandleGetTurnInfo(w http.ResponseWriter, r *http.Request, cfg *TurnConfig) {
-	idEncoded := GetIdFromPath(r.URL.Path)
+func handleGetTurnInfo(w http.ResponseWriter, r *http.Request, cfg *TurnConfig) {
+	idEncoded := getIdFromPath(r.URL.Path)
 	id, err := base64.RawURLEncoding.DecodeString(idEncoded)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
@@ -77,7 +52,7 @@ func HandleGetTurnInfo(w http.ResponseWriter, r *http.Request, cfg *TurnConfig) 
 		return
 	}
 
-	if !VerifyAuthMessage(&authMsg, id) {
+	if !verifyAuthMessage(&authMsg, id) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}

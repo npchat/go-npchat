@@ -20,26 +20,31 @@ type Info struct {
 func main() {
 	startTime := time.Now()
 
-	cfg, err := LoadConfig()
+	cfg, err := loadConfig()
 	if err != nil {
 		log.Fatal("failed to load config", err)
 	}
 	log.Printf("%+v'\n", cfg)
 
+	kv := GobkvClient{
+		mux:        new(sync.RWMutex),
+		authSecret: cfg.Gobkv.AuthSecret,
+	}
+	go kv.keepClientUp(&cfg.Gobkv)
+
 	oracle := Oracle{
-		Users:  make(map[string]*User),
-		Mux:    new(sync.RWMutex),
-		Config: &cfg,
+		users:  make(map[string]*User),
+		mux:    new(sync.RWMutex),
+		config: &cfg,
+		kv:     &kv,
 	}
 
-	oracle.ReadState()
-
-	go oracle.KeepClean()
+	go oracle.keepClean()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
 		if r.Method == "POST" {
-			HandlePost(w, r, &oracle)
+			handlePost(w, r, &oracle)
 			return
 		}
 		if r.URL.Path == "/info" {
@@ -47,7 +52,7 @@ func main() {
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/shareable") {
-			HandleGetShareable(w, r, &oracle)
+			handleGetShareable(w, r, &oracle)
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/turn") {
@@ -55,10 +60,10 @@ func main() {
 				w.Header().Add("Access-Control-Allow-Headers", "Authorization")
 				return
 			}
-			HandleGetTurnInfo(w, r, &cfg.Turn)
+			handleGetTurnInfo(w, r, &cfg.Turn)
 			return
 		}
-		HandleConnection(w, r, &oracle, &cfg)
+		handleConnection(w, r, &oracle, &cfg)
 	})
 
 	addr := fmt.Sprintf(":%v", cfg.Port)
@@ -74,7 +79,7 @@ func main() {
 	}
 }
 
-func GetIdFromPath(path string) string {
+func getIdFromPath(path string) string {
 	// remove beginning "/"
 	cleaned := strings.TrimLeft(path, "/")
 	// return first segment of path

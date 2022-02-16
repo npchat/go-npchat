@@ -25,7 +25,7 @@ type Config struct {
 	UserTTL     Duration
 	CleanPeriod Duration
 	DataLenMax  int
-	PersistFile string
+	Gobkv       GobkvConfig
 	Turn        TurnConfig
 }
 
@@ -56,7 +56,7 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	}
 }
 
-func LoadConfig() (Config, error) {
+func loadConfig() (Config, error) {
 	envConfigFile := os.Getenv(envPrefix + "CONFIG")
 	configFile := ""
 	flag.StringVar(&configFile, "c", envConfigFile, "must be a file path")

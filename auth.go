@@ -5,10 +5,15 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/sha256"
+	"encoding/base64"
+	"errors"
 	"log"
 	"math/big"
+	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/shamaton/msgpack/v2"
 )
 
 type AuthMessage struct {
@@ -17,7 +22,24 @@ type AuthMessage struct {
 	PublicKey []byte `msgpack:"publicKey"`
 }
 
-func VerifyAuthMessage(msg *AuthMessage, id []byte) bool {
+func getAuthMsgFromRequest(r *http.Request) (AuthMessage, error) {
+	authMsg := AuthMessage{}
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return authMsg, errors.New("missing authorization header")
+	}
+	authHeaderDecoded, err := base64.RawURLEncoding.DecodeString(authHeader)
+	if err != nil {
+		return authMsg, err
+	}
+	err = msgpack.Unmarshal(authHeaderDecoded, &authMsg)
+	if err != nil {
+		return authMsg, err
+	}
+	return authMsg, nil
+}
+
+func verifyAuthMessage(msg *AuthMessage, id []byte) bool {
 	// verify Time is within 1 second
 	threshold := time.Duration(1) * time.Second
 	timestamp, err := strconv.ParseInt(string(msg.Time), 10, 64)

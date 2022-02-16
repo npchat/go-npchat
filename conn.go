@@ -16,17 +16,17 @@ type Response struct {
 	Message  interface{} `msgpack:"message"`
 	VapidKey interface{} `msgpack:"vapidKey"`
 	Data     []byte      `msgpack:"data"`
-	Error    interface{} `msgpack:"error"`
+	Err      interface{} `msgpack:"error"`
 }
 
 type Message struct {
-	PushSubscription string `msgpack:"sub"`
-	Data             []byte `msgpack:"data"`
-	ShareableData    []byte `msgpack:"shareableData"`
+	PushSub       string `msgpack:"sub"`
+	Data          []byte `msgpack:"data"`
+	ShareableData []byte `msgpack:"shareableData"`
 }
 
-func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, cfg *Config) {
-	idEnc := GetIdFromPath(r.URL.Path)
+func handleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, cfg *Config) {
+	idEnc := getIdFromPath(r.URL.Path)
 
 	id, err := base64.RawURLEncoding.DecodeString(idEnc)
 	if err != nil || len(id) != 32 {
@@ -48,12 +48,12 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, cfg *Co
 	defer conn.Close()
 
 	conn.SetCloseHandler(func(_ int, _ string) error {
-		user, err := o.GetUser(idEnc, false)
+		user, err := o.getUser(idEnc, false)
 		if err != nil {
 			log.Println(err, idEnc)
 			return err
 		}
-		user.UnregisterWebSocket(conn)
+		user.unregisterWebSocket(conn)
 		return nil
 	})
 
@@ -65,7 +65,7 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, cfg *Co
 		if authMsgType != websocket.BinaryMessage {
 			msg, _ := msgpack.Marshal(Response{
 				Message: "send only binary data serialised with msgpack",
-				Error:   "invalid message type",
+				Err:     "invalid message type",
 			})
 			conn.WriteMessage(websocket.BinaryMessage, msg)
 			return
@@ -76,37 +76,38 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, cfg *Co
 			log.Println("failed to unmarshal auth", err)
 			msg, _ := msgpack.Marshal(Response{
 				Message: "failed to unmarshal message",
-				Error:   err.Error(),
+				Err:     err.Error(),
 			})
 			conn.WriteMessage(websocket.BinaryMessage, msg)
 			return
 		}
-		if !VerifyAuthMessage(&authMsg, id) {
+		if !verifyAuthMessage(&authMsg, id) {
 			msg, _ := msgpack.Marshal(Response{
-				Error: "unauthorized",
+				Err: "unauthorized",
 			})
 			conn.WriteMessage(websocket.BinaryMessage, msg)
 			return
 		}
 
-		user, err := o.GetUser(idEnc, true)
+		user, err := o.getUser(idEnc, true)
 		if err != nil {
 			log.Println("failed to get user for auth", err)
 			return
 		}
 
-		user.Pusher.EnsureKey()
+		user.pusher.ensureKey()
 
+		data, _ := user.getData(o.kv)
 		resp := Response{
 			Message:  "authed",
-			VapidKey: user.Pusher.PublicKey,
-			Data:     user.GetData(),
+			VapidKey: user.pusher.publicKey,
+			Data:     data,
 		}
 		respBin, _ := msgpack.Marshal(resp)
 		conn.WriteMessage(websocket.BinaryMessage, respBin)
 
-		user.RegisterWebSocket(conn)
-		user.SendStored()
+		user.registerWebSocket(conn)
+		user.sendUnread(o.kv)
 
 		// authed msg loop
 		for {
@@ -119,7 +120,7 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, cfg *Co
 			if msgType != websocket.BinaryMessage {
 				msg, _ := msgpack.Marshal(Response{
 					Message: "send only binary data serialised with msgpack",
-					Error:   "invalid message type",
+					Err:     "invalid message type",
 				})
 				conn.WriteMessage(websocket.BinaryMessage, msg)
 				return
@@ -132,33 +133,33 @@ func HandleConnection(w http.ResponseWriter, r *http.Request, o *Oracle, cfg *Co
 				return
 			}
 
-			if msg.PushSubscription != "" {
-				log.Println("got sub", msg.PushSubscription)
+			if msg.PushSub != "" {
+				log.Println("got sub", msg.PushSub)
 				sub := webpush.Subscription{}
-				err := json.Unmarshal([]byte(msg.PushSubscription), &sub)
+				err := json.Unmarshal([]byte(msg.PushSub), &sub)
 				if err != nil {
 					log.Println("failed to unmarshal push subscription")
 				}
-				user.Pusher.AddSubscription(&sub)
+				user.pusher.addSubscription(&sub)
 			}
 
 			if msg.Data != nil && len(msg.Data) <= cfg.DataLenMax {
-				user.SetData(msg.Data)
+				user.setData(msg.Data, o.kv)
 			}
 
 			if msg.ShareableData != nil && len(msg.ShareableData) <= cfg.DataLenMax {
-				user.SetShareableData(msg.ShareableData)
+				user.setShareableData(msg.ShareableData, o.kv)
 			}
 		}
 	}
 }
 
-func CheckOrigin(r *http.Request) bool {
+func checkOrigin(r *http.Request) bool {
 	return true
 }
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  512,
 	WriteBufferSize: 512,
-	CheckOrigin:     CheckOrigin,
+	CheckOrigin:     checkOrigin,
 }

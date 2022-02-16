@@ -8,49 +8,49 @@ import (
 )
 
 type Pusher struct {
-	Subscription *webpush.Subscription
-	PrivateKey   string
-	PublicKey    string
-	Last         time.Time
+	sub        *webpush.Subscription
+	privateKey string
+	publicKey  string
+	last       time.Time
 }
 
-func (p *Pusher) GenerateKeys() {
+func (p *Pusher) generateKeys() {
 	var err error
-	p.PrivateKey, p.PublicKey, err = webpush.GenerateVAPIDKeys()
+	p.privateKey, p.publicKey, err = webpush.GenerateVAPIDKeys()
 	if err != nil {
 		log.Println("failed to generate VAPID keys", err)
 	} else {
-		log.Println("got new VAPID keys", p.PublicKey)
+		log.Println("got new VAPID keys", p.publicKey)
 	}
 }
 
-func (p *Pusher) EnsureKey() {
-	if p.PublicKey == "" {
-		p.GenerateKeys()
+func (p *Pusher) ensureKey() {
+	if p.publicKey == "" {
+		p.generateKeys()
 	}
 }
 
-func (p *Pusher) AddSubscription(subscription *webpush.Subscription) {
-	p.Subscription = subscription
-	p.Last = time.Now()
+func (p *Pusher) addSubscription(subscription *webpush.Subscription) {
+	p.sub = subscription
+	p.last = time.Now()
 }
 
-func (p *Pusher) Push(subscriber string, message []byte) {
-	if p.Subscription == nil {
+func (p *Pusher) push(subscriber string, message []byte) {
+	if p.sub == nil {
 		return
 	}
-	if time.Now().Before(p.Last.Add(time.Minute)) {
+	if time.Now().Before(p.last.Add(time.Minute)) {
 		return
 	}
-	resp, err := webpush.SendNotification(message, p.Subscription, &webpush.Options{
+	resp, err := webpush.SendNotification(message, p.sub, &webpush.Options{
 		Subscriber:      subscriber,
-		VAPIDPublicKey:  p.PublicKey,
-		VAPIDPrivateKey: p.PrivateKey,
+		VAPIDPublicKey:  p.publicKey,
+		VAPIDPrivateKey: p.privateKey,
 		TTL:             120,
 	})
 	if err != nil {
 		log.Println("failed to send push notification", err)
 	}
 	resp.Body.Close()
-	p.Last = time.Now()
+	p.last = time.Now()
 }

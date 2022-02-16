@@ -12,24 +12,22 @@ import (
 )
 
 type User struct {
-	Msgs           []Msg
-	Conns          []Connection  `json:"-"`
-	Online         bool          `json:"-"`
-	Mux            *sync.RWMutex `json:"-"`
-	Pusher         Pusher
-	Data           []byte
-	ShareableData  []byte
-	LastConnection time.Time
-}
-
-type Msg struct {
-	Body []byte    // content
-	Kick time.Time // time to kick from storage
+	id             string
+	conns          []Connection
+	online         bool
+	mux            *sync.RWMutex
+	pusher         Pusher
+	lastConnection time.Time
 }
 
 type Connection struct {
-	Sock *websocket.Conn
-	Mux  *sync.Mutex
+	sock *websocket.Conn
+	mux  *sync.Mutex
+}
+
+type Msg struct {
+	body []byte    // content
+	kick time.Time // time to kick from storage
 }
 
 type MsgData struct {
@@ -41,53 +39,58 @@ type MsgPushNotification struct {
 	From string `json:"from"`
 }
 
-func (u *User) RegisterWebSocket(conn *websocket.Conn) {
+func (u *User) registerWebSocket(conn *websocket.Conn) {
 	c := Connection{
-		Sock: conn,
-		Mux:  new(sync.Mutex),
+		sock: conn,
+		mux:  new(sync.Mutex),
 	}
-	u.Mux.Lock()
-	u.Conns = append(u.Conns, c)
-	u.Online = true
-	u.LastConnection = time.Now()
-	u.Mux.Unlock()
+	u.mux.Lock()
+	u.conns = append(u.conns, c)
+	u.online = true
+	u.lastConnection = time.Now()
+	u.mux.Unlock()
 }
 
-func (u *User) UnregisterWebSocket(conn *websocket.Conn) {
+func (u *User) unregisterWebSocket(conn *websocket.Conn) {
 	keep := []Connection{}
-	u.Mux.Lock()
-	for _, c := range u.Conns {
-		if c.Sock != conn {
+	u.mux.Lock()
+	for _, c := range u.conns {
+		if c.sock != conn {
 			keep = append(keep, c)
 		}
 	}
 	if len(keep) < 1 {
-		u.Online = false
+		u.online = false
 	}
-	u.Conns = keep
-	u.LastConnection = time.Now()
-	u.Mux.Unlock()
+	u.conns = keep
+	u.lastConnection = time.Now()
+	u.mux.Unlock()
 }
 
-func (u *User) Send(msg []byte, ttl time.Duration, doStore bool) {
+// Store & push message
+// TODO: delegate expiry/kick to KV store
+// when gobkv supports metadata & expiry.
+// TODO: handle RPC errors
+func (u *User) sendMessage(msg []byte, oracle *Oracle, doStore bool) {
 	if doStore {
 		// store it
-		m := Msg{
-			Body: msg,
-			Kick: time.Now().Add(ttl),
+		prefix := u.id + "/m/"
+		oracle.kv.setAuto(prefix, msg)
+		if !u.online {
+			// add again with unread/ prefix
+			// to efficiently collect later
+			unreadPrefix := prefix + "unread/"
+			oracle.kv.setAuto(unreadPrefix, msg)
 		}
-		u.Mux.Lock()
-		u.Msgs = append(u.Msgs, m)
-		u.Mux.Unlock()
 	}
 
-	if u.Online {
-		for _, c := range u.Conns {
-			c.Mux.Lock()
-			err := c.Sock.WriteMessage(websocket.BinaryMessage, msg)
-			c.Mux.Unlock()
+	if u.online {
+		for _, c := range u.conns {
+			c.mux.Lock()
+			err := c.sock.WriteMessage(websocket.BinaryMessage, msg)
+			c.mux.Unlock()
 			if err != nil {
-				u.UnregisterWebSocket(c.Sock)
+				u.unregisterWebSocket(c.sock)
 				log.Println("failed to send msg, cleaned up socket", err)
 			}
 		}
@@ -99,54 +102,63 @@ func (u *User) Send(msg []byte, ttl time.Duration, doStore bool) {
 			err := msgpack.Unmarshal(msg, &msgData)
 			if err != nil {
 				log.Println("failed to unmarshal message")
-				u.Pusher.Push("", []byte("Received message"))
+				u.pusher.push("", []byte("Received message"))
 			} else {
 				marshalled, _ := json.Marshal(MsgPushNotification{
 					Type: "message",
 					From: base64.RawURLEncoding.EncodeToString(msgData.From),
 				})
-				u.Pusher.Push("", marshalled)
+				u.pusher.push("", marshalled)
 			}
 		}
 		// else message disappears silently
 	}
 }
 
-func (u *User) SendStored() {
-	u.Mux.RLock()
-	for _, c := range u.Conns {
-		c.Mux.Lock()
-		for _, m := range u.Msgs {
-			err := c.Sock.WriteMessage(websocket.BinaryMessage, m.Body)
-			if err != nil {
-				log.Println(c.Sock.RemoteAddr(), "failed to send stored msg", err)
-			}
-		}
-		c.Mux.Unlock()
+// Collect & send all messages, then delete expired from storage
+// TODO: delegate expiry/kick to gobkv
+// TODO: use buffered channel to fetch & send messages concurrently
+func (u *User) sendUnread(kv *GobkvClient) {
+	u.mux.RLock()
+	defer u.mux.RUnlock()
+	msgList, err := kv.list(u.id + "/m/unread/")
+	if err != nil {
+		log.Println("failed to collect msgs:", err)
+		return
 	}
-	u.Mux.RUnlock()
+	for _, mKey := range msgList {
+		msg, err := kv.get(mKey)
+		if err != nil {
+			log.Println("failed to collect msg", mKey, err)
+			continue
+		}
+		if err != nil {
+			log.Println("failed to decode msg", mKey, err)
+			continue
+		}
+		//kv.del(mKey) /////
+		for _, c := range u.conns {
+			c.mux.Lock()
+			err = c.sock.WriteMessage(websocket.BinaryMessage, msg)
+			if err != nil {
+				log.Println(c.sock.RemoteAddr(), "failed to send stored msg", err)
+			}
+			c.mux.Unlock()
+		}
+	}
 }
 
-func (u *User) SetData(data []byte) {
-	u.Mux.Lock()
-	u.Data = data
-	u.Mux.Unlock()
+func (u *User) setData(data []byte, kv *GobkvClient) error {
+	return kv.set(u.id+"/data", data)
 }
 
-func (u *User) GetData() []byte {
-	u.Mux.RLock()
-	defer u.Mux.RUnlock()
-	return u.Data
+func (u *User) getData(kv *GobkvClient) ([]byte, error) {
+	return kv.get(u.id + "/data")
 }
 
-func (u *User) SetShareableData(shareableData []byte) {
-	u.Mux.Lock()
-	u.ShareableData = shareableData
-	u.Mux.Unlock()
-}
-
-func (u *User) GetShareableData() []byte {
-	u.Mux.RLock()
-	defer u.Mux.RUnlock()
-	return u.ShareableData
+func (u *User) setShareableData(shareableData []byte, kv *GobkvClient) {
+	err := kv.set(u.id+"/shareable", shareableData)
+	if err != nil {
+		log.Println("failed to store shareable", err)
+	}
 }

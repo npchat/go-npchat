@@ -5,15 +5,15 @@ import (
 	"net/http"
 )
 
-func HandlePost(w http.ResponseWriter, r *http.Request, o *Oracle) {
+func handlePost(w http.ResponseWriter, r *http.Request, oracle *Oracle) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "failed to read body", http.StatusBadRequest)
 		return
 	}
 	r.Body.Close()
-	id := GetIdFromPath(r.URL.Path)
-	user, err := o.GetUser(id, true)
+	id := getIdFromPath(r.URL.Path)
+	user, err := oracle.getUser(id, true)
 	if err != nil {
 		http.Error(w, "failed to get user", http.StatusInternalServerError)
 		return
@@ -22,5 +22,5 @@ func HandlePost(w http.ResponseWriter, r *http.Request, o *Oracle) {
 	queryValues := r.URL.Query()
 	doStore := queryValues.Get("store") != "false"
 
-	user.Send(body, o.Config.MsgTTL.Duration, doStore)
+	user.sendMessage(body, oracle, doStore)
 }

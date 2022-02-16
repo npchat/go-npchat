@@ -3,6 +3,7 @@ module github.com/dr-useless/go-npchat
 go 1.17
 
 require (
+	github.com/dr-useless/gobkv v0.0.6
 	github.com/SherClockHolmes/webpush-go v1.1.3
 	github.com/gorilla/websocket v1.4.2
 	github.com/shamaton/msgpack/v2 v2.1.0
