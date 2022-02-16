@@ -22,21 +22,32 @@ type AuthMessage struct {
 	PublicKey []byte `msgpack:"publicKey"`
 }
 
-func getAuthMsgFromRequest(r *http.Request) (AuthMessage, error) {
+func getAuthMsgFromHeader(r *http.Request) (AuthMessage, error) {
 	authMsg := AuthMessage{}
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		return authMsg, errors.New("missing authorization header")
+		return authMsg, errors.New("invalid authorization header")
 	}
-	authHeaderDecoded, err := base64.RawURLEncoding.DecodeString(authHeader)
+	return decodeAuthMsg(authHeader)
+}
+
+func getAuthMsgFromQuery(r *http.Request) (AuthMessage, error) {
+	authMsg := AuthMessage{}
+	authQuery := r.URL.Query().Get("auth")
+	if authQuery == "" {
+		return authMsg, errors.New("invalid authorization query param")
+	}
+	return decodeAuthMsg(authQuery)
+}
+
+func decodeAuthMsg(authStr string) (AuthMessage, error) {
+	authMsg := AuthMessage{}
+	decoded, err := base64.RawURLEncoding.DecodeString(authStr)
 	if err != nil {
 		return authMsg, err
 	}
-	err = msgpack.Unmarshal(authHeaderDecoded, &authMsg)
-	if err != nil {
-		return authMsg, err
-	}
-	return authMsg, nil
+	err = msgpack.Unmarshal(decoded, &authMsg)
+	return authMsg, err
 }
 
 func verifyAuthMessage(msg *AuthMessage, id []byte) bool {

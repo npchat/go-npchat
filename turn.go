@@ -46,7 +46,7 @@ func handleGetTurnInfo(w http.ResponseWriter, r *http.Request, cfg *TurnConfig) 
 		return
 	}
 
-	authMsg, err := getAuthMsgFromRequest(r)
+	authMsg, err := getAuthMsgFromHeader(r)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
