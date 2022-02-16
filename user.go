@@ -136,7 +136,7 @@ func (u *User) sendUnread(kv *GobkvClient) {
 			log.Println("failed to decode msg", mKey, err)
 			continue
 		}
-		//kv.del(mKey) /////
+		kv.del(mKey)
 		for _, c := range u.conns {
 			c.mux.Lock()
 			err = c.sock.WriteMessage(websocket.BinaryMessage, msg)
