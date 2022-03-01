@@ -55,4 +55,4 @@ COPY ./fly.config.json /etc/npchat/fly.config.json
 
 EXPOSE 8080
 
-ENTRYPOINT ["/go/bin/npchat", "--config=/etc/npchat/fly.config.json"]
+ENTRYPOINT ["/go/bin/npchat", "--c=/etc/npchat/fly.config.json"]
